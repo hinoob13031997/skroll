@@ -43,7 +43,7 @@ export function buildGallery({products}){
     <div class="gx-stage">
       <img class="gx-sky" src="/assets/system/sky.webp" width="2560" height="1440" alt="">
       <div class="gx-hero">
-        <img class="gx-hero-img" src="/assets/film/hero.webp" width="2880" height="1620" alt="Огромная тёмная планета и восходящая звезда над чёрной водой" fetchpriority="high">
+        <picture class="frame"><source media="(max-width:760px) and (max-aspect-ratio:9/16)" srcset="/assets/hero-portrait.webp"><img class="gx-hero-img" src="/assets/film/hero.webp" width="2880" height="1620" alt="Огромная тёмная планета и восходящая звезда над чёрной водой" fetchpriority="high" decoding="async"></picture>
         <div class="gx-hello">
           <p class="gx-greet" data-greet>Шесть миров Moonvit</p>
           <h1 class="gx-title" id="gx-title" data-greet-title>Твоя вселенная <em>начинается внутри</em></h1>

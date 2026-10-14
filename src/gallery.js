@@ -80,7 +80,8 @@ const HERO=1.1,STEP=.8,TAIL=.35; // in screen heights of scroll
 let W=0,H=0,narrow=false,G={};
 function resize(){
  W=stage.clientWidth;H=stage.clientHeight;narrow=W/H<.9;
- const dpr=Math.min(devicePixelRatio||1,2);cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);gl.viewport(0,0,cv.width,cv.height);
+ const dpr=Math.min(devicePixelRatio||1,2),cw=Math.round(W*dpr),ch=Math.round(H*dpr);
+ if(cv.width!==cw||cv.height!==ch){cv.width=cw;cv.height=ch;gl.viewport(0,0,cw,ch)} // a phone toolbar sliding does not clear the canvas
  const R=3.2,cam=1.2,dist=R+cam,asp=W/H;
  const w=narrow?.52:.6,step=narrow?.64:.72,pa=narrow?.8:16/9; // angular width, spacing, panel aspect
  const hh=R*w/pa;
@@ -94,6 +95,8 @@ resize();addEventListener('resize',resize);
 let rot=0,vel=0,mx=0,my=0,tx=0,ty=0,last=performance.now(),t0=last,front=-1,hit=null,open=null,visible=true;
 const giant=gx.querySelector('.gx-giant'),hero=gx.querySelector('.gx-hero'),heroImg=gx.querySelector('.gx-hero-img'),flash=gx.querySelector('.gx-flash');
 const screens=()=>-gx.getBoundingClientRect().top/H;
+// style writes only when a value really changes: a custom property set on the wall restyles everything inside it
+const seen=new WeakMap(),put=(el,k,v)=>{let m=seen.get(el);if(!m)seen.set(el,m={});if(m[k]===v)return;m[k]=v;k.startsWith('--')?el.style.setProperty(k,v):el.style[k]=v};
 function project(x,y,z){return[(x/G.tanX/-z*.5+.5)*W,(.5-y/G.tanY/-z*.5)*H]}
 function frame(now){
  const dt=Math.min(.05,(now-last)/1000);last=now;const t=(now-t0)/1000;
@@ -101,13 +104,13 @@ function frame(now){
  // hero: dive into the star, flash, the wall appears
  const dive=smooth(0,.8,sh); // the flash peaks at .76 of the dive and is gone when the first world stands still
  const gone=sh>=.8; // after the flash the hero is not drawn at all (a 3× still is a heavy layer)
- hero.style.visibility=gone?'hidden':'';
- if(!gone)heroImg.style.transform=`scale(${1+dive*dive*2.2})`;
- hero.style.opacity=String(1-smooth(.7,.8,sh));
- hero.style.setProperty('--hello',String(1-smooth(.04,.32,sh)));
- flash.style.opacity=String(smooth(.45,.76,sh)*(1-smooth(.78,1,sh))*.94);
+ put(hero,'visibility',gone?'hidden':'');
+ if(!gone)put(heroImg,'transform',dive>0?`scale(${(1+dive*dive*2.2).toFixed(4)})`:''); // untouched at rest: the still stays on its sharp, unscaled layer
+ put(hero,'opacity',(1-smooth(.7,.8,sh)).toFixed(3));
+ put(hero,'--hello',(1-smooth(.04,.32,sh)).toFixed(3));
+ put(flash,'opacity',(smooth(.45,.76,sh)*(1-smooth(.78,1,sh))*.94).toFixed(3));
  const fade=smooth(.74,1,sh);
- gx.style.setProperty('--wall',fade.toFixed(3));
+ put(gx,'--wall',fade.toFixed(3));
  // the wall: scroll position → world index (float), eased
  const target=clamp((s-HERO)/STEP,0,N-1);
  const prev=rot;rot+=(target-rot)*Math.min(1,dt*7);vel+=((rot-prev)/Math.max(dt,.001)-vel)*Math.min(1,dt*10);
@@ -128,7 +131,7 @@ function frame(now){
  const f=Math.round(rot);
  if(f!==front){front=f;items.forEach((li,i)=>li.classList.toggle('is-front',i===f));btns.forEach(b=>b.classList.toggle('is-on',b.dataset.gxGo===worlds[f].id));
   giant.textContent=worlds[f].li.querySelector('.gx-name').textContent;gx.style.setProperty('--on',worlds[f].li.style.getPropertyValue('--accent'));}
- gx.style.setProperty('--turn',clamp(1-Math.abs(rot-f)*3).toFixed(3)); // words fade while the wall is between worlds
+ put(gx,'--turn',clamp(1-Math.abs(rot-f)*3).toFixed(3)); // words fade while the wall is between worlds
  const a0=(f-rot)*G.step-G.w/2+tx*.035,a1=a0+G.w,z0=-G.R*Math.cos(a0)-G.cam,z1=-G.R*Math.cos(a1)-G.cam;
  const p0=project(G.R*Math.sin(a0),G.hh/2,z0),p1=project(G.R*Math.sin(a1),-G.hh/2,z1);
  hit=fade>.9?{x0:p0[0],y0:p0[1],x1:p1[0],y1:p1[1],id:worlds[f].id}:null;

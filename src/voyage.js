@@ -112,7 +112,8 @@ const CAN={luna:[.359,.641,.258,.738],saturn:[.361,.640,.253,.731],venus:[.3515,
 vg.classList.add('is-live');
 vg.style.height=`${(N-1)*SEG+170}svh`; // +70: the final frame rests before the page moves on (REST below)
 
-let W=innerWidth,H=innerHeight;
+// the stage is 100svh: its size, not innerHeight (which jumps with a phone's toolbar), sets the picture's geometry
+let W=stage.clientWidth||innerWidth,H=stage.clientHeight||innerHeight,quality=1;
 const wide=()=>W/H>1.15;
 const focusOf=s=>{const cs=getComputedStyle(s.el);return[parseFloat(cs.getPropertyValue('--fx'))/100,parseFloat(cs.getPropertyValue('--fy'))/100]};
 scenes.forEach(s=>{s.f=focusOf(s);s.life=LIFE[s.id]||LIFE.hero;s.g=0;
@@ -374,11 +375,17 @@ function initGL(){
     s.pivot=x.getImageData(Math.round(s.f[0]*63),Math.round(s.f[1]*35),1,1).data[0]/255}catch{}};
   im.src=`/assets/film/depth/${s.id}.webp`});
  // frames come from the scene <img>s; mipmaps keep the 2880px masters crisp when zoomed out
- scenes.forEach(s=>{s.tex=null;const im=s.img;im.loading='eager';
-  const up=()=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im);gl.generateMipmap(gl.TEXTURE_2D);
+ // uploads are decoded off the main thread first and then go to the GPU one per animation frame: twenty 2880px frames
+ // landing at once used to stall the start of the film
+ const queue=[];let pumping=0;
+ const pump=()=>{pumping=0;queue.shift()?.();if(queue.length)pumping=requestAnimationFrame(pump)};
+ const later=job=>{queue.push(job);if(!pumping)pumping=requestAnimationFrame(pump)};
+ scenes.forEach((s,i)=>{s.tex=null;const im=s.img;im.loading='eager';
+  const ready=()=>{if(i===0)return up();(im.decode?im.decode():Promise.resolve()).catch(()=>{}).then(()=>later(up))};
+  const up=()=>{gl.activeTexture(gl.TEXTURE0);const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im);gl.generateMipmap(gl.TEXTURE_2D);
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);s.tex=t};
-  if(im.complete&&im.naturalWidth)up();else im.addEventListener('load',up,{once:true});});
+  if(im.complete&&im.naturalWidth)ready();else im.addEventListener('load',ready,{once:true});});
  canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();location.reload()});
  stage.prepend(canvas);
  const S=new Float32Array(64),J=new Float32Array(8),C3=new Float32Array(8),fogc=new Float32Array(6),tint=new Float32Array(6);
@@ -395,8 +402,11 @@ function initGL(){
   S.set(L.sun?[...L.sun,0]:[0,0,0,0],o+24);S.set([cam.blur,cam.pan?cam.pan[0]:pan,L.path?1:0,cam.pan?cam.pan[1]:0],o+28);
   J.set(L.jar||[1,0,0,0],slot*4);fogc.set(L.fogc,slot*3);tint.set(L.tint,slot*3)}
  return{canvas,
-  size(){const dpr=Math.min(devicePixelRatio||1,W<700?1.5:2),k=Math.min(dpr,Math.sqrt(2.6e6/(W*H))); // depth marching per pixel: keep the budget sane
-   canvas.width=Math.round(W*k);canvas.height=Math.round(H*k);gl.viewport(0,0,canvas.width,canvas.height);
+  // the screen's own pixels (Retina / 2K / 4K, at most a 4K frame), scaled by `quality` when the GPU cannot keep up
+  // (see pace()); never below the old fixed budget of ~2.2 MP
+  size(){const dpr=Math.min(devicePixelRatio||1,2),full=Math.min(dpr,Math.sqrt(8.3e6/(W*H))),floor=Math.min(full,Math.sqrt(2.2e6/(W*H)));
+   const k=Math.max(floor,full*quality),w=Math.round(W*k),h=Math.round(H*k);
+   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h)}
    gl.uniform1f(u.uAspect,W/H);gl.uniform2f(u.uRes,canvas.width,canvas.height)},
   draw(A,B,t,camA,camB,time,flash,sway,open,tr){
    pack(0,A,camA);pack(1,B||A,camB||camA);
@@ -458,7 +468,7 @@ function initFx(){
   ctx.restore();
  }
  let k=1;
- return{size(){k=Math.min(devicePixelRatio||1,1.5);c.width=W*k;c.height=H*k;ctx.setTransform(k,0,0,k,0,0)},
+ return{size(){k=Math.min(devicePixelRatio||1,2);c.width=Math.round(W*k);c.height=Math.round(H*k);ctx.setTransform(c.width/W,0,0,c.height/H,0,0)}, // sharp particles on Retina
   draw(dt,time,speed,fx,fy,rgb,worlds){
    ctx.clearRect(0,0,W,H);
    if(speed>.12){ctx.lineCap='round';const cx=fx*W,cy=fy*H,sc=Math.max(W,H)*.55,tail=Math.min(.5,speed*.22),al=Math.min(1,(speed-.12)*2);
@@ -479,9 +489,26 @@ if(R)vg.classList.add('is-gl');
 let target=0,cur=0,last=performance.now(),time=0,inView=true,raf=0,mx=0,my=0,tmx=0,tmy=0,vel=0,jumpUntil=0;
 // the film runs over span() px of scroll; after it the final frame ("Шесть миров. Один ты.") rests for REST svh
 // before the page lifts it away
-const REST=70,span=()=>vg.offsetHeight-innerHeight*(1+REST/100);
-function read(){target=window.vgP??clamp((scrollY-vg.offsetTop)/span())*(N-1)} // vgP: screenshots
-function measure(){W=innerWidth;H=innerHeight;scenes.forEach(reach);R?.size();fx?.size()}
+// Geometry is cached: reading offsetTop/offsetHeight on every scroll event and every frame forced a layout right after
+// the frame's style writes (a stutter on long pages). The stage is 100svh, so a phone's toolbar sliding in and out
+// changes neither the film's length nor the canvas — no jumps and no canvas reallocations while scrolling.
+const REST=70;let top0=0,len0=0,span0=1,dpr0=0;
+const span=()=>span0;
+function geometry(){top0=vg.offsetTop;len0=vg.offsetHeight;span0=Math.max(1,len0-H*(1+REST/100))}
+function read(){target=window.vgP??clamp((scrollY-top0)/span0)*(N-1)} // vgP: screenshots
+function measure(){const w=stage.clientWidth||innerWidth,h=stage.clientHeight||innerHeight,same=w===W&&h===H&&dpr0===devicePixelRatio;
+ W=w;H=h;dpr0=devicePixelRatio;if(!same||!measure.done){scenes.forEach(reach);R?.size();fx?.size();measure.done=1}geometry()}
+// Resolution follows the GPU: the film starts at the screen's own pixels; if frames come slower than ~50 fps for half a
+// second it steps down 15% (down to the old fixed budget), and after a while of smooth frames it tries a step up again,
+// waiting twice as long after every step that turned out too heavy. The first seconds (frame uploads) are not judged.
+const Q={sum:0,n:0,good:0,hold:performance.now()+3000,wait:5000};
+function pace(ms,now){
+ if(!R||ms>250||now<Q.hold)return;
+ Q.sum+=ms;if(++Q.n<30)return;const avg=Q.sum/Q.n;Q.sum=Q.n=0;
+ if(avg>20&&quality>.5){quality=Math.max(.5,quality*.85);R.size();Q.good=0;Q.hold=now+1000;Q.wait=Math.min(60000,Q.wait*2);return}
+ if(avg<18.5&&quality<1){Q.good+=avg*30;if(Q.good>Q.wait){quality=Math.min(1,quality/.85);R.size();Q.good=0;Q.hold=now+1000}}
+ else if(avg>=18.5)Q.good=0;
+}
 addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;tmx=e.clientX/W-.5;tmy=e.clientY/H-.5},{passive:true});
 
 function copyAndRail(p){
@@ -498,7 +525,7 @@ function copyAndRail(p){
    s.img.style.transform=`scale(${((1+(1-t)*.22)*(1.03+drift*.07)*(1+tn*tn*.45)).toFixed(4)})`;
   }
   const o=(i===0?1:sstep(i-.12,i,p))*(i===N-1?1:1-sstep(i+HOLD*.5,i+HOLD*.95,p));
-  s.copy.style.opacity=o.toFixed(3);s.copy.style.transform=`translate3d(0,${((1-o)*24).toFixed(1)}px,0)`;
+  s.copy.style.opacity=o.toFixed(3);s.copy.style.transform=o>.999?'':`translate3d(0,${((1-o)*24).toFixed(1)}px,0)`; // at rest the text leaves its GPU layer: crisp glyphs
   s.copy.style.visibility=o>.01?'visible':'hidden';
  });
  const world=worldOf(scenes[active].id);
@@ -613,7 +640,7 @@ function film(p,dt){
 
 function frame(now){
  raf=0;
- const dt=Math.min(.05,(now-last)/1000);last=now;time=window.vgTime??time+dt; // vgTime: screenshots
+ const dt=Math.min(.05,(now-last)/1000);pace(now-last,now);last=now;time=window.vgTime??time+dt; // vgTime: screenshots
  cur+=(target-cur)*(1-Math.exp(-dt*(R?3.2:7)));
  if(Math.abs(target-cur)<1e-4||now<jumpUntil||window.vgSnap)cur=target; // jumps cut straight to the shot; vgSnap: screenshots
  copyAndRail(cur);chrome();
@@ -630,13 +657,14 @@ function cut(top){jumpUntil=performance.now()+400;scrollTo({top,behavior:'instan
 const skip=vg.querySelector('.vg-skip'),toTop=document.querySelector('.vg-top');
 skip?.addEventListener('click',e=>{const h=skip.getAttribute('href'),el=h.startsWith('#')&&document.querySelector(h);if(!el)return;e.preventDefault();cut(el.getBoundingClientRect().top+scrollY)});
 toTop?.addEventListener('click',e=>{e.preventDefault();cut(0);document.querySelector('.vg-start')?.focus({preventScroll:true})});
-function chrome(){const end=vg.offsetTop+vg.offsetHeight-innerHeight*.5;
+function chrome(){const end=top0+len0-H*.5;
  toTop?.classList.toggle('is-on',scrollY>end);skip?.classList.toggle('is-on',cur>.25&&cur<N-1.15)}
 
 new IntersectionObserver(([e])=>{inView=e.isIntersecting;if(inView)kick()}).observe(vg);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)kick()});
 addEventListener('scroll',()=>{kick();chrome()},{passive:true});
 addEventListener('resize',()=>{measure();kick()},{passive:true});
+addEventListener('load',()=>{geometry();kick()}); // fonts and images can still move the page under the film
 measure();read();cur=target;copyAndRail(cur);kick();
 // screenshots: #vg=<scene>[@<0..1 into the flight>][,<time s>[,<jar turn rad>]] opens that world at a fixed moment
 {const m=/^#vg=([\w-]+)(?:@([\d.]+))?(?:,([\d.]+))?(?:,(-?[\d.]+))?/.exec(location.hash);
