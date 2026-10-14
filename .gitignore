@@ -1,0 +1,19 @@
+node_modules/
+.sites-runtime/
+*.zip
+*.log
+.env*
+
+# Build output: build.mjs generates it (locally and on GitHub). Only the ready web images in dist/assets live in git.
+/dist/*
+!/dist/assets/
+
+# Heavy source media and local tool settings stay on this computer only:
+# 4K masters, reference screenshots, raw videos and plates (GitHub rejects files over 100 MB; the site does not need them).
+/*.png
+/*.MP4
+/*.mp4
+/сайт2/assets/
+/мунвит/
+/.claude/
+/.openai/
