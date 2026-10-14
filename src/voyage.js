@@ -497,8 +497,11 @@ const span=()=>span0;
 function geometry(){top0=vg.offsetTop;len0=vg.offsetHeight;span0=Math.max(1,len0-H*(1+REST/100))}
 function read(){target=window.vgP??clamp((scrollY-top0)/span0)*(N-1)} // vgP: screenshots
 function measure(){const w=stage.clientWidth||innerWidth,h=stage.clientHeight||innerHeight,same=w===W&&h===H&&dpr0===devicePixelRatio;
- W=w;H=h;dpr0=devicePixelRatio;if(!same||!measure.done){scenes.forEach(reach);R?.size();fx?.size();measure.done=1}geometry()}
-// Resolution follows the GPU: the film starts at the screen's own pixels; if frames come slower than ~50 fps for half a
+ W=w;H=h;dpr0=devicePixelRatio;
+ // big screens start at ~4.5 MP and climb to their own pixels while frames stay smooth (stepping down mid-flight shows)
+ if(!measure.done){const full=Math.min(devicePixelRatio||1,2,Math.sqrt(8.3e6/(W*H)));quality=Math.min(1,Math.sqrt(4.5e6/(W*H*full*full)))}
+ if(!same||!measure.done){scenes.forEach(reach);R?.size();fx?.size();measure.done=1}geometry()}
+// Resolution follows the GPU: the film works up to the screen's own pixels; if frames come slower than ~50 fps for half a
 // second it steps down 15% (down to the old fixed budget), and after a while of smooth frames it tries a step up again,
 // waiting twice as long after every step that turned out too heavy. The first seconds (frame uploads) are not judged.
 const Q={sum:0,n:0,good:0,hold:performance.now()+3000,wait:5000};
