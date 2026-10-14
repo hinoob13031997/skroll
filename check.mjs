@@ -11,7 +11,7 @@ for(const file of files.filter(f=>f.endsWith('.html'))){
  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);if(new Set(ids).size!==ids.length)errors.push(file+': duplicate IDs');
  for(const m of html.matchAll(/(?:href|src)="([^"]+)"/g)){
   const value=m[1];if(!value.startsWith('/')&&!value.startsWith('#'))continue;
-  const [path,hash]=value.split('#');let target=path?resolve('dist','.'+path):resolve(file);
+  const [full,hash]=value.split('#'),path=full.split('?')[0];let target=path?resolve('dist','.'+path):resolve(file);
   if(path?.endsWith('/'))target+='/index.html';
   try{await stat(target);if(hash&&target.endsWith('.html')){const dest=target===resolve(file)?html:await readFile(target,'utf8');if(!dest.includes(`id="${hash}"`))errors.push(`${file}: missing anchor ${value}`);}}catch{errors.push(`${file}: missing local file ${value}`);}checked++;
  }

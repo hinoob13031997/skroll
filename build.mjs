@@ -1,4 +1,6 @@
 import {mkdir,writeFile,readFile,copyFile,readdir} from 'node:fs/promises';
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {products} from './content/products.mjs';
 import {buildCinemaHome,buildHomeRest} from './content/cinema-home.mjs';
 import {buildGallery} from './content/gallery-home.mjs';
@@ -11,12 +13,14 @@ const footer=`<footer class="footer"><div class="footer-top"><a href="/" class="
 // Every page: display serif + UI grotesk (both with Cyrillic).
 const fontsHead='<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Manrope:wght@300;400;500;600&display=swap">';
 // /voyage/ only: the scroll film through the worlds (src/voyage.js). Home: the dive + curved wall of worlds (src/gallery.js).
-const filmHead='<script src="/voyage.js" defer></script>';
-const galleryHead='<script src="/gallery.js" defer></script>';
+// ?v=<hash of the sources>: after a deploy browsers never mix a new page with yesterday's cached styles or scripts
+const ver=createHash('sha1').update(['styles.css','app.js','voyage.js','gallery.js'].map(f=>readFileSync('src/'+f)).join('')).digest('hex').slice(0,8);
+const filmHead=`<script src="/voyage.js?v=${ver}" defer></script>`;
+const galleryHead=`<script src="/gallery.js?v=${ver}" defer></script>`;
 async function page(path,title,description,body,options={}){
  const url=origin+path;routes.push(path);
  const json=options.product?{'@context':'https://schema.org','@type':'Product',name:`Moonvit ${options.product.name} — ${options.product.title}`,description:options.product.description,image:origin+'/assets/'+options.product.id+'-pack.webp',brand:{'@type':'Brand',name:'Moonvit'}}:{'@context':'https://schema.org','@type':'WebPage',name:title,url,description};
- const html=`<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#080a0d"><title>${esc(title)} | Moonvit</title><meta name="description" content="${esc(description)}"><link rel="canonical" href="${esc(url)}"><meta property="og:type" content="website"><meta property="og:locale" content="ru_RU"><meta property="og:title" content="${esc(title)} | Moonvit"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(origin+'/assets/'+(options.product?options.product.id+'-cinema':'hero')+'.webp')}"><meta name="twitter:card" content="summary_large_image"><link rel="icon" href="/favicon.svg" type="image/svg+xml">${fontsHead}<link rel="stylesheet" href="/styles.css">${options.film?filmHead:''}${options.gallery?galleryHead:''}<script type="application/ld+json">${JSON.stringify(json).replace(/</g,'\\u003c')}</script><script src="/app.js" defer></script></head><body>${header}<main id="main">${body}</main>${footer}</body></html>`;
+ const html=`<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#080a0d"><title>${esc(title)} | Moonvit</title><meta name="description" content="${esc(description)}"><link rel="canonical" href="${esc(url)}"><meta property="og:type" content="website"><meta property="og:locale" content="ru_RU"><meta property="og:title" content="${esc(title)} | Moonvit"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(origin+'/assets/'+(options.product?options.product.id+'-cinema':'hero')+'.webp')}"><meta name="twitter:card" content="summary_large_image"><link rel="icon" href="/favicon.svg" type="image/svg+xml">${fontsHead}<link rel="stylesheet" href="/styles.css?v=${ver}">${options.film?filmHead:''}${options.gallery?galleryHead:''}<script type="application/ld+json">${JSON.stringify(json).replace(/</g,'\\u003c')}</script><script src="/app.js?v=${ver}" defer></script></head><body>${header}<main id="main">${body}</main>${footer}</body></html>`;
  const dest=path==='/'?'dist/index.html':`dist${path}index.html`;await mkdir(dest.slice(0,dest.lastIndexOf('/')),{recursive:true});await writeFile(dest,html);
 }
 // A world frame in three sizes from its 4K master: 1280 (cards), 1920 (2K screens), 2880 (Retina / 4K) — the browser
