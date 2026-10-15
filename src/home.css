@@ -15,9 +15,9 @@
 .hr-ritual-copy{align-self:center;max-width:430px}
 .hr-ritual-copy>p:not(.hr-label){color:var(--hr-muted);margin-block:22px}
 .hr-text-link{display:inline-flex;align-items:center;gap:18px;min-height:44px;font-size:14px;border-bottom:1px solid #7d8699}
-.hr-gummies{position:relative;margin:0;max-width:340px;width:100%;justify-self:center;align-self:center}
-.hr-gummies img{width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:6px}
-.hr-gummies figcaption{position:absolute;bottom:12px;left:14px;width:max-content;max-width:calc(100% - 28px);font-size:12px;color:#e1e6f0;background:#080b13e8;padding:5px 10px;border-radius:3px}
+.hr-gummies{position:relative;margin:0;max-width:440px;width:100%;justify-self:center;align-self:center}
+.hr-gummies img{width:100%;height:auto;aspect-ratio:3/2;object-fit:contain}
+.hr-gummies figcaption{margin-top:6px;text-align:center;font-size:12px;color:var(--hr-muted)}
 .hr-steps{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px;border-top:1px solid var(--line);padding-top:30px}
 .hr-steps article{display:flex;align-items:flex-start;gap:18px}
 .hr-steps article>span,.hr-steps svg{width:40px;flex:0 0 40px;font-size:28px;line-height:1.2;color:var(--hr-lunar);font-weight:400}
@@ -116,7 +116,7 @@
  .hr-shell{width:calc(100% - 40px)}.home-rest h2{font-size:32px}.hr-label{font-size:12px;margin-bottom:12px}
  .hr-shortcuts{padding-block:12px;gap:0 20px;font-size:12px}.hr-shortcuts button{font-size:12px;padding:8px 14px}
  .hr-ritual{grid-template-columns:1fr;gap:28px;padding-block:44px}.hr-ritual-copy{max-width:none}.hr-ritual-copy>p:not(.hr-label){font-size:15px;margin-block:18px}
- .hr-gummies{max-width:280px}.hr-steps{grid-template-columns:1fr;gap:22px;padding-top:24px}.hr-steps h3{font-size:17px}
+ .hr-gummies{max-width:380px}.hr-steps{grid-template-columns:1fr;gap:22px;padding-top:24px}.hr-steps h3{font-size:17px}
  .hr-catalog{padding-block:44px}.hr-heading{display:block;margin-bottom:24px}.hr-heading>p{margin-top:14px}.hr-heading>p br{display:none}
  .hr-filters{gap:8px;margin-bottom:24px}.hr-filters button{padding:8px 12px;font-size:12px}
  .hr-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 14px}.hr-card-art{aspect-ratio:1.05}.hr-card-art>span{left:8px;top:8px;padding:3px 8px;font-size:11px}
