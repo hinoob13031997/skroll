@@ -348,3 +348,18 @@ html.motion-off .sw-img{animation:none}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{-moz-osx-font-smoothing:grayscale;font-kerning:normal}
 h1,h2,h3,.vg-title,.gx-title,.gx-name,.gx-giant,.sw-name,.sw-line,.gx-phrase{text-rendering:optimizeLegibility;font-feature-settings:"kern","liga"}
+
+/* A calmer scale: cinema stays full-screen; copy and information are easier to scan. */
+h1{font-size:clamp(42px,5.2vw,76px)}h2{font-size:clamp(34px,4vw,56px)}h3{font-size:clamp(23px,2vw,29px)}
+.header{height:82px}.desktop-nav{gap:24px}.logo{font-size:32px}
+.section{padding-block:76px}.section-heading{margin-bottom:36px}.page-head{padding-top:145px;padding-bottom:56px}
+.product-copy h1{font-size:clamp(54px,6.5vw,96px)}.product-tagline{font-size:clamp(22px,2.5vw,34px)}
+.vg-title{font-size:clamp(44px,5.5vw,80px);line-height:1.03;max-width:14ch;text-wrap:balance}
+.vg-name{font-size:clamp(64px,7vw,112px);line-height:.95;margin-block:16px 20px}
+.vg-line{font-size:clamp(23px,2.1vw,30px)}.vg-lead{margin-block:22px 28px;line-height:1.7}
+.vg-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px 24px}
+.vg-direct{display:inline-flex;align-items:center;min-height:44px;border-bottom:1px solid #ffffff70;font-size:13px}
+.vg-facts{margin-block:22px 24px;font-size:13px}
+.vg-final .vg-title{font-size:clamp(40px,4.5vw,68px)}
+@media(max-width:1000px){.desktop-nav{gap:16px;font-size:13px}}
+@media(max-width:700px){.header{height:72px}.mobile-menu{top:72px}.section{padding-block:52px}.page-head{padding-top:120px;padding-bottom:36px}.vg-title{font-size:clamp(37px,10.2vw,52px)}.vg-name{font-size:clamp(58px,18vw,82px)}.vg-final .vg-title{font-size:clamp(34px,8.5vw,48px)}.vg-lead{font-size:14px;margin-block:18px 20px}.vg-actions{gap:10px 20px}.vg-start{font-size:13px;min-height:46px;padding-inline:22px}.vg-direct{font-size:12px}.vg-line{font-size:23px}.vg-facts{margin-block:16px 18px}.product-copy h1{font-size:56px}}

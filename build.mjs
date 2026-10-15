@@ -14,14 +14,15 @@ const footer=`<footer class="footer"><div class="footer-top"><a href="/" class="
 const fontsHead='<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Manrope:wght@300;400;500;600&display=swap">';
 // /voyage/ only: the scroll film through the worlds (src/voyage.js). Home: the dive + curved wall of worlds (src/gallery.js).
 // ?v=<hash of the sources>: after a deploy browsers never mix a new page with yesterday's cached styles or scripts
-const ver=createHash('sha1').update(['styles.css','app.js','voyage.js','gallery.js'].map(f=>readFileSync('src/'+f)).join('')).digest('hex').slice(0,8);
+const ver=createHash('sha1').update(['styles.css','app.js','voyage.js','gallery.js','home.css','home.js'].map(f=>readFileSync('src/'+f)).join('')).digest('hex').slice(0,8);
 const filmHead=`<script src="/voyage.js?v=${ver}" defer></script>`;
 const galleryHead=`<script src="/gallery.js?v=${ver}" defer></script>`;
+const homeHead=`<link rel="stylesheet" href="/home.css?v=${ver}"><script type="module" src="/home.js?v=${ver}"></script>`;
 async function page(path,title,description,body,options={}){
  const url=origin+path;routes.push(path);
  const json=options.product?{'@context':'https://schema.org','@type':'Product',name:`Moonvit ${options.product.name} — ${options.product.title}`,description:options.product.description,image:origin+'/assets/'+options.product.id+'-pack.webp',brand:{'@type':'Brand',name:'Moonvit'}}:{'@context':'https://schema.org','@type':'WebPage',name:title,url,description};
  const html=`<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#080a0d"><title>${esc(title)} | Moonvit</title><meta name="description" content="${esc(description)}"><link rel="canonical" href="${esc(url)}"><meta property="og:type" content="website"><meta property="og:locale" content="ru_RU"><meta property="og:title" content="${esc(title)} | Moonvit"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(origin+'/assets/'+(options.product?options.product.id+'-cinema':'hero')+'.webp')}"><meta name="twitter:card" content="summary_large_image"><link rel="icon" href="/favicon.svg" type="image/svg+xml">${fontsHead}<link rel="stylesheet" href="/styles.css?v=${ver}">${options.film?filmHead:''}${options.gallery?galleryHead:''}<script type="application/ld+json">${JSON.stringify(json).replace(/</g,'\\u003c')}</script><script src="/app.js?v=${ver}" defer></script></head><body>${header}<main id="main">${body}</main>${footer}</body></html>`;
- const dest=path==='/'?'dist/index.html':`dist${path}index.html`;await mkdir(dest.slice(0,dest.lastIndexOf('/')),{recursive:true});await writeFile(dest,html);
+ const dest=path==='/'?'dist/index.html':`dist${path}index.html`;await mkdir(dest.slice(0,dest.lastIndexOf('/')),{recursive:true});await writeFile(dest,options.home?html.replace('</head>',homeHead+'</head>'):html);
 }
 // A world frame in three sizes from its 4K master: 1280 (cards), 1920 (2K screens), 2880 (Retina / 4K) — the browser
 // picks by the width it actually draws. Phones get a 9:16 cut of the master for full-screen backgrounds.
@@ -50,14 +51,15 @@ const glyphs={
 const glyph=k=>`<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">${glyphs[k]}</svg>`;
 const home2=buildGallery({products})+buildHomeRest({lineup,trio,link,products});
 // Home is the flight through the worlds (the version the video was shot from); the dive + wall of worlds lives on /gallery/.
-await page('/','Путешествие по шести мирам','Кинематографичный полёт через шесть миров Moonvit: Luna, Saturn, Venus, Mars, Earth и Neptune.',buildCinemaHome({products,sectionHead,picture,link,orb,lineup,trio}),{film:true});
-await page('/gallery/','Шесть миров — что тебе нужно сегодня?','Шесть миров Moonvit. Жевательные витамины для ежедневной заботы о себе: Luna, Saturn, Venus, Mars, Earth и Neptune.',home2,{gallery:true});
+await page('/','Путешествие по шести мирам','Кинематографичный полёт через шесть миров Moonvit: Luna, Saturn, Venus, Mars, Earth и Neptune.',buildCinemaHome({products,sectionHead,picture,link,orb,lineup,trio})+buildHomeRest({products,trio}),{film:true,home:true});
+await page('/gallery/','Шесть миров — что тебе нужно сегодня?','Шесть миров Moonvit. Жевательные витамины для ежедневной заботы о себе: Luna, Saturn, Venus, Mars, Earth и Neptune.',home2,{gallery:true,home:true});
 // Old address of the flight: forward to the home page, keeping #vg=… screenshot links.
 await mkdir('dist/voyage',{recursive:true});
 await writeFile('dist/voyage/index.html',`<!doctype html><html lang="ru"><head><meta charset="UTF-8"><title>Путешествие по шести мирам | Moonvit</title><meta name="description" content="Путешествие по шести мирам Moonvit теперь на главной странице."><link rel="canonical" href="${esc(origin+'/')}"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0; url=/"><script>location.replace('/'+location.hash)</script></head><body><h1>Путешествие теперь на <a href="/">главной</a></h1></body></html>`);
 await mkdir('dist',{recursive:true});
 await writeFile('dist/favicon.svg','<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#080a0d"/><text x="32" y="43" text-anchor="middle" font-family="Arial" font-size="42" fill="#f5f3ed">m</text></svg>');
 await copyFile('src/styles.css','dist/styles.css');await copyFile('src/app.js','dist/app.js');await copyFile('src/voyage.js','dist/voyage.js');await copyFile('src/gallery.js','dist/gallery.js');
+await copyFile('src/home.css','dist/home.css');await copyFile('src/home.js','dist/home.js');
 const head=(label,title,desc='')=>`<section class="page-head"><p class="eyebrow">${label}</p><h1>${title}</h1>${desc?`<p>${desc}</p>`:''}</section>`;
 await page('/catalog/','Коллекция — шесть миров','Все шесть комплексов Moonvit: составы, вкусы, способы приёма и официальные каналы покупки.',head('Коллекция Moonvit','Шесть миров.<br><em>Один ты.</em>','Каждая формула — отдельное направление заботы о себе. Познакомься с составом, выбери свой вкус и ритуал.')+`<section class="content-section">${cards()}</section>`);
 function composition(p){
@@ -94,7 +96,7 @@ const legalNames={delivery:'Доставка и возврат',offer:'Публ�
 for(const [key,title] of Object.entries(legalNames)){
  let body;
  if(key==='details')body='<h2>ООО «МУНВИТ»</h2><p>ИНН 7730325082<br>ОГРН 1247700449325</p><p>Юридический адрес: 121087, г. Москва, муниципальный округ Филёвский парк, проезд Береговой, д. 1Б, помещ. 22Н.</p><p>Email: <a href="mailto:pr@moonvit.space">pr@moonvit.space</a>.</p><p>Сведения приведены из политики обработки данных Moonvit. Полные платёжные реквизиты запрашивайте у компании.</p>';
- else body=`${key==='privacy'?'<p>На этой версии сайта нет аналитики, серверного сбора заявок или оплаты. Настройка движения сохраняется только в вашем браузере. Контактная форма готовит письмо в вашей почтовой программе. Ниже — опубликованная политика официального сайта Moonvit, куда ведут ссылки покупки.</p>':''}<details class="legal-document"><summary>Документ официального сайта Moonvit</summary>${legal[key].slice(2).filter(t=>t!=='Редакция от [дата].').map(t=>/^\d+\.\s/.test(t)&&t.length<140?`<h2>${esc(t)}</h2>`:`<p>${esc(t)}</p>`).join('')}</details>`;
+ else body=`${key==='privacy'?'<p>На этой версии сайта нет аналитики, серверного сбора заявок или оплаты. Настройка движения и выбранные комплексы в «Моём наборе» сохраняются только в вашем браузере. Ответы на вопросы подбора не сохраняются и не отправляются на сервер. Контактная форма готовит письмо в вашей почтовой программе. Ниже — опубликованная политика официального сайта Moonvit, куда ведут ссылки покупки.</p>':''}<details class="legal-document"><summary>Документ официального сайта Moonvit</summary>${legal[key].slice(2).filter(t=>t!=='Редакция от [дата].').map(t=>/^\d+\.\s/.test(t)&&t.length<140?`<h2>${esc(t)}</h2>`:`<p>${esc(t)}</p>`).join('')}</details>`;
  await page(`/legal/${key}/`,title,`${title} Moonvit. Информация и документы официального магазина.`,head('Документы Moonvit',title)+`<section class="content-section prose"><p class="notice">Покупка и оплата происходят на выбранной площадке. Действующие условия уточняйте перед оформлением заказа. ${link('https://moonvit.space/'+(key==='details'?'privacy':key),'Источник на официальном сайте ↗')}</p>${body}</section>`);
 }
 await page('/legal/','Документы','Юридические документы и реквизиты Moonvit.',head('Moonvit','Документы')+`<section class="content-section legal-list">${Object.entries(legalNames).map(([k,v])=>link('/legal/'+k+'/',v+' ↗')).join('')}</section>`);

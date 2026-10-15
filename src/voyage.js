@@ -658,7 +658,7 @@ vg.querySelectorAll('[data-vg-go]').forEach(a=>a.addEventListener('click',e=>{e.
 // "skip the flight" and "back to the start": cut instantly instead of fast-forwarding / rewinding the whole film
 function cut(top){jumpUntil=performance.now()+400;scrollTo({top,behavior:'instant'});kick()}
 const skip=vg.querySelector('.vg-skip'),toTop=document.querySelector('.vg-top');
-skip?.addEventListener('click',e=>{const h=skip.getAttribute('href'),el=h.startsWith('#')&&document.querySelector(h);if(!el)return;e.preventDefault();cut(el.getBoundingClientRect().top+scrollY)});
+vg.querySelectorAll('[data-vg-exit]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href'),el=h.startsWith('#')&&document.querySelector(h);if(!el)return;e.preventDefault();cut(el.getBoundingClientRect().top+scrollY);history.replaceState(null,'',h);el.querySelector('h2')?.setAttribute('tabindex','-1');el.querySelector('h2')?.focus({preventScroll:true})}));
 toTop?.addEventListener('click',e=>{e.preventDefault();cut(0);document.querySelector('.vg-start')?.focus({preventScroll:true})});
 function chrome(){const end=top0+len0-H*.5;
  toTop?.classList.toggle('is-on',scrollY>end);skip?.classList.toggle('is-on',cur>.25&&cur<N-1.15)}
