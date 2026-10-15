@@ -27,7 +27,7 @@ jobs:
       - id: pages
         uses: actions/configure-pages@v5
       - name: Сборка и проверка
-        run: node build.mjs && node check.mjs && node tools/check-gummies.mjs
+        run: node build.mjs && node check.mjs && node tools/check-gummies.mjs && node tools/check-gummy-interaction.mjs
       - name: Сборка под адрес GitHub Pages
         run: node build.mjs
         env:

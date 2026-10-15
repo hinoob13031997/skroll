@@ -50,8 +50,8 @@ const LIFE={
  ...space(),
  final:  {planet:[.5,1.9,1.4,.03], sun:[.56,.51,1],  water:null,     swirl:null,            fog:[0,0,0,0],       fall:null,              jar:null,              fogc:[.5,.6,.8],    tint:[220,228,255],pan:0,  z:1.1, dive:[.56,.51]}
 };
-// Pull the resting view back slightly, with less lateral pan so no image edge is exposed.
-for(const [id,life] of Object.entries(LIFE))if(!life.path&&id!=='final'){life.pan*=.55;life.z=1+(life.z-1)*.55;}
+// Rest on the complete composition, not a permanently enlarged close-up. Flights keep their own camera.
+for(const [id,life] of Object.entries(LIFE))if(!life.path){life.pan*=.32;life.z=id==='hero'?1.015:id==='final'?1.03:.94;}
 // Frames between the worlds (сайт2/assets/plates): cruise_* open space, pass_* the planet just left slides past while
 // the next one is ahead, path_* the approach. In space the camera never dives into a point: it travels (move) —
 // from centre a to centre b, zoom z[0]→z[1] (reached at 80% of the frame's time on screen, then it keeps going),
@@ -117,6 +117,9 @@ vg.style.height=`${(N-1)*SEG+170}svh`; // +70: the final frame rests before the 
 // the stage is 100svh: its size, not innerHeight (which jumps with a phone's toolbar), sets the picture's geometry
 let W=stage.clientWidth||innerWidth,H=stage.clientHeight||innerHeight,quality=1;
 const wide=()=>W/H>1.15;
+// Fit the whole composition: tall panes keep its width, wide screens keep its height.
+// CPU hit testing and the shader share this framing; extra space fades into the dark stage.
+function frameSpan(aspect){const a=16/9;return[Math.max(1,aspect/a),Math.max(1,a/aspect)];}
 const focusOf=s=>{const cs=getComputedStyle(s.el);return[parseFloat(cs.getPropertyValue('--fx'))/100,parseFloat(cs.getPropertyValue('--fy'))/100]};
 scenes.forEach(s=>{s.f=focusOf(s);s.life=LIFE[s.id]||LIFE.hero;s.g=0;
  s.orbs=(ORBS[s.id]||[]).map(o=>({...o,ang:o.ang0||0,vel:0,s}));s.can=CAN[s.id]||null;s.spin=0;s.spinV=0});
@@ -153,7 +156,10 @@ float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<4;i++){v+=a*noise(p);p=p*2.03+vec2(17.1,9.2);a*=.5;}return v;}
 const vec2 K=vec2(1.7778,1.);
-vec2 cover(vec2 s,vec2 f){vec2 v=vec2(min(1.,uAspect/uImgA),min(1.,uImgA/uAspect));return f*(1.-v)+s*v;}
+vec2 cover(vec2 s,vec2 f){
+ vec2 v=vec2(max(1.,uAspect/uImgA),max(1.,uImgA/uAspect));
+ return f*(1.-v)+s*v;
+}
 // camera: pan, zoom + roll around the focus, parallax (lower = nearer), idle drift
 vec2 camera(int b,vec2 s){
  vec4 P=uS[b];vec2 f=P.xy,pan=uS[b+7].yw;vec2 q=cover(s-pan,f);
@@ -184,10 +190,7 @@ vec2 living(int b,int k,vec2 q,float dep){
  if(PL.w>0.){ // planet slowly turns on its axis
   vec2 d=(q-PL.xy)*K/PL.z;float rr=dot(d,d);
   if(rr<1.){float z=sqrt(1.-rr),a=sin(t*.09)*PL.w;q=mix(q,PL.xy+vec2(cos(a)*d.x+sin(a)*z,d.y)*PL.z/K,ss(1.,.86,rr));}}
- if(WA.x<1.&&q.y>WA.x){ // water: perspective ripples
-  float hy=WA.x,d=(q.y-hy)/(1.-hy),w=(q.y-hy)/(d+.12);
-  float n=noise(vec2(q.x*16.,w*55.)+vec2(t*.12,-t*.8)),n2=noise(vec2(q.x*40.,w*130.)+vec2(-t*.18,-t*1.3));
-  q+=vec2((n-.5)*.005,(n2-.5)*.007)*WA.y*(.2+d)*ss(0.,.025,q.y-hy);}
+ // Water keeps the photographed surface. The old high-frequency displacement also crossed the jar's label.
  if(FO.w>0.){ // heat haze
   float band=ss(FO.x-.15,FO.x,q.y)*ss(FO.y+.25,FO.y,q.y);
   q+=vec2(noise(q*vec2(40,70)+vec2(0,-t*.9))-.5,noise(q*vec2(45,60)+vec2(5,-t*.7))-.5)*.0035*FO.w*band*far;}
@@ -212,7 +215,7 @@ vec3 light(int b,int k,vec2 q,vec3 col){
  if(FO.z>0.){ // drifting mist
   float band=ss(FO.x-.12,FO.x+.05,q.y)*ss(FO.y+.12,FO.y-.05,q.y);
   col+=uFogC[k]*fbm(q*vec2(4.,6.)+vec2(t*.035,t*.01))*fbm(q*vec2(9.,5.)-vec2(t*.02,0))*FO.z*band*1.4;}
- if(WA.x<1.&&q.y>WA.x){col+=pow(noise(vec2(q.x*300.,q.y*900.)+vec2(t*.6,-t*2.2)),16.)*WA.y*(.4+lum*2.)*.9;} // glints
+ // No screen-space water glitter: subpixel white dashes alias into horizontal rippling bands.
  if(PL.z>0.){float r=length((q-PL.xy)*K)/PL.z;col+=col*ss(.9,1.,r)*ss(1.06,1.,r)*(.35+.25*sin(t*.7));} // breathing limb
  if(J.y>J.x){ // light sweeping over the jar + breathing rim light on its edges and on the ground under it
   float m=ss(J.x,J.x+.015,q.x)*ss(J.y,J.y-.015,q.x)*ss(J.z,J.z+.03,q.y)*ss(J.w,J.w-.02,q.y);
@@ -223,13 +226,11 @@ vec3 light(int b,int k,vec2 q,vec3 col){
   col+=tint*e*m*(.12+.1*sin(t*1.3));
   col+=tint*exp(-pow((q.y-J.w)/.025,2.))*ss(J.x-.06,J.x+.06,q.x)*ss(J.y+.06,J.y-.06,q.x)*(.14+.08*sin(t*.9+1.));}
  if(SU.z>0.){ // pulsing star with slowly turning rays
-  vec2 d=(q-SU.xy)*K;float r=length(d),a=atan(d.y,d.x),pulse=.85+.15*sin(t*1.1)+.05*sin(t*3.7);
+  vec2 d=(q-SU.xy)*K;float r=length(d),a=atan(d.y,d.x),pulse=1.;
   vec3 sc=mix(vec3(1.,.8,.55),tint,.35);
   col+=sc*(.0022/(r*r+.0022))*.4*SU.z*pulse;
   col+=sc*(pow(max(0.,sin(a*5.+t*.12)),30.)+.6*pow(max(0.,sin(a*9.-t*.08+1.3)),50.))*exp(-r*4.5)*.3*SU.z*pulse;}
- vec2 g=q*vec2(760.,428.);float h=hash(floor(g)); // twinkling stars in the dark sky
- if(h>.994){float st=ss(.35,0.,length(fract(g)-.5)),tw=.35+.65*pow(.5+.5*sin(t*(1.5+h*5.)+h*80.),3.);
-  col+=vec3(.85,.9,1.)*st*tw*(1.-ss(.05,.2,lum));}
+ // Stars are already in the source image; do not sprinkle flickering points over rocks and water.
  return col;
 }
 // real parallax from the depth map: march the view ray from the near plane (L=1) to the far one (L=0) and take the
@@ -295,7 +296,9 @@ vec3 orbs(sampler2D T,int k,vec2 q,vec3 col,float dep,float blur){
 vec3 scene(sampler2D T,sampler2D D,int b,int k,vec2 s,float blur,out float dep){
  gMir=uS[b+7].z;vec2 q=march(D,camera(b,s),uS[b].xy,uC3[k],dep);
  gJarShade=1.;q=living(b,k,q,dep);
- return light(b,k,q,orbs(T,k,q,tex(T,q,uS[b].xy,blur),dep,blur)*gJarShade);
+ vec3 colour=light(b,k,q,orbs(T,k,q,tex(T,q,uS[b].xy,blur),dep,blur)*gJarShade);
+ float matte=ss(-.012,.018,q.x)*ss(1.012,.982,q.x)*ss(-.018,.025,q.y)*ss(1.018,.975,q.y);
+ return mix(vec3(.012,.016,.02),colour,gMir>.5?1.:matte);
 }
 void main(){
  vec2 s=vUv;float dA,dB;
@@ -340,7 +343,7 @@ void main(){
  }
  col+=mix(uTint[0],uTint[1],uT)/255.*uFlash*.1;
  vec2 v=(s-.5)*vec2(uAspect*.55,1.);col*=1.-dot(v,v)*.55;
- col+=(hash(s*uRes+fract(uTime*7.)*91.)-.5)*.035;
+ // No animated grain: keep the native image clean while the camera moves.
  o=vec4(col,1.);
 }`;
 
@@ -369,7 +372,7 @@ function initGL(){
  const black=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,black);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([3,4,5,255]));
  const flat=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,flat);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,255]));
  // depth maps (tools/depth.py): the pivot depth is read at the focus, so the jar stays put while the world orbits it
- scenes.forEach(s=>{s.dtex=null;s.pivot=.5;const im=new Image();im.decoding='async';
+ scenes.forEach(s=>{s.dtex=null;s.pivot=.5;if(s.id==='hero')return;const im=new Image();im.decoding='async';
   im.onload=()=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im);
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);s.dtex=t;
@@ -388,7 +391,7 @@ function initGL(){
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);s.tex=t};
   if(im.complete&&im.naturalWidth)ready();else im.addEventListener('load',ready,{once:true});});
- canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();location.reload()});
+ canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();R=null;vg.classList.remove('is-gl');canvas.remove();stage.querySelector('.vg-stars')?.remove();copyAndRail(cur);kick()});
  stage.prepend(canvas);
  const S=new Float32Array(64),J=new Float32Array(8),C3=new Float32Array(8),fogc=new Float32Array(6),tint=new Float32Array(6);
  const O=new Float32Array(48),CN=new Float32Array(8),SP=new Float32Array(2);
@@ -428,7 +431,7 @@ function initFx(){
  const c=document.createElement('canvas');c.className='vg-stars';c.setAttribute('aria-hidden','true');
  const ctx=c.getContext('2d');const g=stage.querySelector('.vg-gl');g?g.after(c):stage.prepend(c);
  const rnd=(a,b)=>a+Math.random()*(b-a);
- const stars=Array.from({length:220},()=>({x:rnd(-1,1),y:rnd(-1,1),z:Math.random()}));
+ const stars=Array.from({length:90},()=>({x:rnd(-1,1),y:rnd(-1,1),z:Math.random()}));
  const make={
   hero:()=>Array.from({length:60},()=>({x:Math.random(),y:rnd(.35,.95),s:rnd(.4,1.4),v:rnd(.003,.01),ph:rnd(0,7)})),
   luna:()=>Array.from({length:70},()=>({x:Math.random(),y:rnd(.3,1),s:rnd(.4,1.6),v:rnd(.004,.018),ph:rnd(0,7)})),
@@ -478,13 +481,13 @@ function initFx(){
      s.z-=speed*dt*.35;if(s.z<=.03){s.z=1;s.x=rnd(-1,1);s.y=rnd(-1,1)}
      const x=cx+s.x/s.z*sc,y=cy+s.y/s.z*sc;if(x<-50||x>W+50||y<-50||y>H+50){s.z=1;continue}
      const z2=Math.min(1,s.z+tail),near=1-s.z;
-     ctx.strokeStyle=`rgba(${rgb},${(near*near*.85*al).toFixed(3)})`;ctx.lineWidth=.4+near*1.8;
+     ctx.strokeStyle=`rgba(${rgb},${(near*near*.28*al).toFixed(3)})`;ctx.lineWidth=.3+near*1.2;
      ctx.beginPath();ctx.moveTo(cx+s.x/z2*sc,cy+s.y/z2*sc);ctx.lineTo(x+.01,y);ctx.stroke()}}
-   worlds.forEach(([id,al])=>world(id,al,dt,time));
+   // Ambient bubbles / pixel confetti are deliberately disabled. Only a real flight draws subtle streaks.
   }};
 }
 
-const R=initGL();
+let R=initGL();
 const fx=R?initFx():null;
 if(R)vg.classList.add('is-gl');
 
@@ -527,10 +530,11 @@ function copyAndRail(p){
    if(t<1){const r=(t*s.max).toFixed(1);s.el.style.webkitMaskImage=s.el.style.maskImage=`radial-gradient(circle at var(--fx) var(--fy),#000 ${Math.max(0,r-110)}px,transparent ${r}px)`}
    else s.el.style.webkitMaskImage=s.el.style.maskImage='none';
    const drift=clamp(p-i+1,0,2)/2;
-   s.img.style.transform=`scale(${((1+(1-t)*.22)*(1.03+drift*.07)*(1+tn*tn*.45)).toFixed(4)})`;
+   const restingZoom=s.id==='hero'||s.id==='final'?1:.94;
+   s.img.style.transform=`scale(${((1+(1-t)*.22)*(restingZoom+drift*.02)*(1+tn*tn*.45)).toFixed(4)})`;
   }
   const o=(i===0?1:sstep(i-.12,i,p))*(i===N-1?1:1-sstep(i+HOLD*.5,i+HOLD*.95,p));
-  s.copy.style.opacity=o.toFixed(3);s.copy.style.transform=o>.999?'':`translate3d(0,${((1-o)*24).toFixed(1)}px,0)`; // at rest the text leaves its GPU layer: crisp glyphs
+  s.copy.style.opacity=o.toFixed(3);s.copy.style.transform=''; // stable text baseline; only the world/camera moves
   s.copy.style.visibility=o>.01?'visible':'hidden';
  });
  const world=worldOf(scenes[active].id);
@@ -544,7 +548,7 @@ function copyAndRail(p){
 // screen uv → frame uv for the scene at rest (the shader's camera() without the depth march): hit tests only
 let view=null; // {s,cam,sway} of the world on screen, null during flights
 function toImage(sx,sy){
- const{s,cam,sway}=view,iA=16/9,asp=W/H,v=[Math.min(1,asp/iA),Math.min(1,iA/asp)],f=cam.c,pan=cam.pan||[wide()?s.life.pan:0,0];
+ const{s,cam,sway}=view,v=frameSpan(W/H),f=cam.c,pan=cam.pan||[wide()?s.life.pan:0,0];
  let q=[f[0]*(1-v[0])+(sx-pan[0])*v[0],f[1]*(1-v[1])+(sy-pan[1])*v[1]];
  let dx=(q[0]-f[0])*16/9,dy=q[1]-f[1];const c=Math.cos(cam.roll),n=Math.sin(cam.roll);
  [dx,dy]=[(c*dx-n*dy)/cam.zoom,(n*dx+c*dy)/cam.zoom];
@@ -587,8 +591,8 @@ function film(p,dt){
  // the pair on screen: A is fully open, B is opening (t)
  let a=0;for(let i=1;i<N;i++)if(opened(i,p)>=1)a=i;
  const A=scenes[a],B=a<N-1&&opened(a+1,p)>0?scenes[a+1]:null,t=B?opened(a+1,p):0;
- const rest=clamp(p-a,0,1),breathe=Math.sin(time*.31)*.01;
- const zA=wide()?A.life.z:1.04,zB=B?(wide()?B.life.z:1.04):zA;
+ const rest=clamp(p-a,0,1);
+ const zA=A.life.z,zB=B?B.life.z:zA;
  // A keeps pushing in while it rests, then dives into its jar with a roll; B arrives from a close-up and unrolls
  // camera centre: the world's focus while resting, its planet/star while diving out; the next world arrives
  // centred on its own planet/star and settles on its jar
@@ -598,12 +602,12 @@ function film(p,dt){
  // world is entered already "inside" and the landscape gathers around the camera as the dolly unwinds
  vel+=(Math.min(1,Math.abs(target-cur)*6)-vel)*Math.min(1,dt*3);
  mx+=(tmx-mx)*Math.min(1,dt*2.5);my+=(tmy-my)*Math.min(1,dt*2.5);
- const orbit=k=>[Math.sin(time*.17+k)*.014+Math.sin(time*.061)*.006+mx*.022,Math.cos(time*.13+k)*.006+my*.012];
+ const orbit=k=>[Math.sin(time*.17+k)*.005+Math.sin(time*.061)*.003+mx*.008,Math.cos(time*.13+k)*.003+my*.005];
  const u2=(1-t)*(1-t);
  // flight: the camera heads for the world's star/planet (near things spread a little faster than the sky), its light
  // blooms over the lens and the next world comes out of that light, settling on its jar. Big parallax moves are not
  // possible from single stills (nothing is known behind the jar) — those need plates or video (сайт2/*_PROMPTS.md).
- const oa=orbit(0),ob=orbit(1.7);
+ const oa=orbit(0);
  const pA=A.life.path?1:0;
  // in open space the camera travels its route (life.move) the whole time the frame is on screen — arriving, resting
  // and leaving are one continuous move, so two space frames in a row read as one flight past the planets. Only when a
@@ -621,8 +625,8 @@ function film(p,dt){
    blur:dive*dive*.14,off:[M.side*(1-2*gi)+mx*.02,Math.sin(time*.13)*.004+my*.012],dolly:.05+.1*gi+dive*dive*.3,pivot:.03}}; // a strong depth dolly would swell the planets and smear the edges
  const intoWorld=B&&!B.life.path&&B.id!=='final';
  // leaving a world the camera flies at its planet: stronger dolly, so the jar and near rocks rush out past the edges
- const camA=A.life.move?travel(A,g(a),intoWorld?t:0):{c:mix2(A.f,A.life.dive,sstep(0,.35,t)),zoom:zA*(1+rest*.05+breathe)*(1+t*t*1.7),roll:Math.sin(time*.07)*.012+t*t*.08,blur:t*t*.16,
-  off:oa.map(v=>v*(1-t)),dolly:.04+rest*.08+t*t*1.3};
+ const camA=A.life.move?travel(A,g(a),intoWorld?t:0):{c:mix2(A.f,A.life.dive,sstep(0,.35,t)),zoom:zA*(1+rest*.025)*(1+t*t*1.7),roll:Math.sin(time*.07)*.012+t*t*.08,blur:t*t*.16,
+  off:oa.map(v=>v*(1-t)),dolly:t*t*.35};
  // the next planet seen from the pass frame → where the path frame's planet must be: on screen a point sits at
  // (P − c)·zoom from the centre, so the same place and size means z = zoomA·rP/rQ and c = Q − (P − cA)·rQ/rP
  let match=null;
@@ -630,7 +634,7 @@ function film(p,dt){
   match={c:[Q.c[0]-(P.c[0]-camA.c[0])*k,Q.c[1]-(P.c[1]-camA.c[1])*k],z:camA.zoom/k}}
  // a world settles from a close-up; a space frame is already travelling when it appears
  const camB=B&&(B.life.move?travel(B,g(a+1),0,match):{c:mix2(B.life.dive,B.f,sstep(.3,1,t)),zoom:zB*(1+u2*1.1),roll:-u2*.1+Math.sin(time*.07)*.012,blur:u2*.12,
-  off:ob.map(v=>v*t),dolly:.1+u2*.5});
+  off:oa.map(v=>v*t),dolly:u2*.25});
  const flight=B?Math.sin(t*Math.PI):0;
  const sway=[Math.sin(time*.19)*.005+Math.sin(time*.053)*.003+mx*.01,Math.cos(time*.16)*.0035+my*.007];
  view=!B||t<.04?{s:A,cam:camA,sway}:null;
@@ -640,7 +644,7 @@ function film(p,dt){
  R.draw(A,B,t,camA,camB,time,flight,sway,open,tr);
  const lead=B&&t>.5?B:A,f=B?open:onScreen(A);
  // star streaks belong to flights through space; mist, dust, ring and water carry their own motion
- fx.draw(dt,time,flight*(tr.kind===0||tr.kind===6?1.6:tr.kind===7?.4:.5)+vel*(pA?2.4:.6),f[0],f[1],lead.life.tint.join(','),[[A.id,1-t],...(B?[[B.id,t]]:[])]);
+ fx.draw(dt,time,flight*(tr.kind===0||tr.kind===6?1.1:tr.kind===7?.3:.4),f[0],f[1],lead.life.tint.join(','),[[A.id,1-t],...(B?[[B.id,t]]:[])]);
 }
 
 function frame(now){

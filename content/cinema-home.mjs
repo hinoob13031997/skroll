@@ -14,7 +14,8 @@ const fs=id=>`--fx:${focus[id][0]}%;--fy:${focus[id][1]}%`;
 // vertical placement of the copy, so the text does not sit in one spot for the whole film
 const place={luna:'low',saturn:'high',venus:'mid',mars:'low',earth:'mid',neptune:'high'};
 const nm=p=>p.name.charAt(0)+p.name.slice(1).toLowerCase(); // LUNA → Luna
-const img=(id,alt,i)=>`<img class="vg-img" src="${FILM}/${id}.webp" width="1672" height="941" alt="${alt}" decoding="async"${i===0?' fetchpriority="high"':' loading="lazy"'}>`;
+const formula=p=>p.keys.split('·').map(component=>`<span class="vg-component">${component.trim()}</span>`).join('');
+const img=(id,alt,i)=>`<img class="vg-img" src="${FILM}/${id==='hero'?'hero-clean-v2':id}.webp" width="1672" height="941" alt="${alt}" decoding="async"${i===0?' fetchpriority="high"':' loading="lazy"'}>`;
 const onWay={luna:'серебристой Луне',saturn:'Сатурну с золотыми кольцами',venus:'жемчужно-розовой Венере',mars:'красному Марсу',earth:'зелёно-голубой Земле',neptune:'синему Нептуну'};
 const path=(p,i)=>`<section class="vg-scene vg-path" data-scene="path-${p.id}" style="${fs('path-'+p.id)};--accent:${p.color}" aria-label="Полёт к миру ${nm(p)}">
       ${img('path-'+p.id,`Полёт сквозь пояс астероидов к ${onWay[p.id]}`,i)}
@@ -41,7 +42,7 @@ export function buildCinemaHome({products,picture,orb,lineup,trio,link}){
         <p class="vg-count">${i+1} из 6 <span>${p.state}</span></p>
         <h2 class="vg-name" id="vg-${p.id}">${nm(p)}</h2>
         <p class="vg-line">${p.tagline}</p>
-        <dl class="vg-facts"><div><dt>Формула</dt><dd>${p.keys}</dd></div><div><dt>Вкус</dt><dd>${p.taste}</dd></div></dl>
+        <dl class="vg-facts"><div><dt>Формула</dt><dd class="vg-formula">${formula(p)}</dd></div><div><dt>Вкус</dt><dd>${p.taste}</dd></div></dl>
         <a class="vg-link" href="/worlds/${p.id}/">Открыть мир ${nm(p)}</a>
       </div>
     </section>`).join('');

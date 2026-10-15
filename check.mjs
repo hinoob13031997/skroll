@@ -36,9 +36,12 @@ for(const file of ['dist/index.html']){
  for(const p of data){assert.ok(p.composition.length>0);assert.ok(p.url.startsWith('/worlds/'));}
  assert.ok(!html.includes('home-final-title'),'No repeated final billboard below the FAQ');
  assert.equal((html.match(/Шесть миров\. Один ты\./g)||[]).length,1,'The finale appears once, inside the flight');
- assert.match(html,/data-gummies-viewer/);assert.match(html,/data-gummy-action="reset"/);
+ assert.match(html,/data-gummies-viewer/);assert.ok(!html.includes('data-gummy-action='),'No arrow/reset button panel below the gummies');
+ assert.match(html,/assets\/fonts\/onest-variable\.ttf/);assert.ok(!html.includes('fonts.googleapis.com'),'Fonts are self-hosted');
+ assert.match(html,/hero-clean-v2\.webp/);
  assert.ok(!html.includes('href="/gallery/'),'Main navigation uses one world journey');
  assert.match(html,/id="worlds"/);
+ assert.match(html,/<span class="vg-component">витамин C<\/span>/,'Vitamin name and letter wrap together');
 }
 const legacy=await readFile('dist/gallery/index.html','utf8');
 assert.ok(!legacy.includes('class="gx"'),'The old gallery does not start another scroll');
@@ -53,4 +56,4 @@ for(const goal of ['luna','saturn','venus','mars','earth','neptune'])for(const t
 assert.equal(recommend({goal:'unknown',time:'morning',caffeine:'yes'}),null);
 if(errors.length){console.error(errors.join('\n'));process.exit(1);}
 const bytes=(await Promise.all(files.map(async f=>(await stat(f)).size))).reduce((a,b)=>a+b,0);
-console.log(`PASS: ${files.filter(f=>f.endsWith('.html')).length} HTML documents, ${checked} local references, content corrections, SEO, unique IDs, one finale, legacy world redirects, 3D controls and 48 quiz combinations. Total dist: ${(bytes/1024/1024).toFixed(2)} MB.`);
+console.log(`PASS: ${files.filter(f=>f.endsWith('.html')).length} HTML documents, ${checked} local references, content corrections, SEO, unique IDs, one finale, legacy world redirects, gummy without arrow buttons, self-hosted font, formula wrapping and 48 quiz combinations. Total dist: ${(bytes/1024/1024).toFixed(2)} MB.`);
