@@ -70,5 +70,17 @@ function initHome(){
   else if(button.matches('[data-show-all]'))filterCatalog('all');
  });
  $('.hr-filters').hidden=false;$$('[data-save],[data-open-bag]').forEach(button=>button.hidden=false);renderSaved();renderQuiz();
+ // Load the 3D engine only when its small viewer is approaching the screen.
+ const gummyHost=$('[data-gummies-viewer]');let gummyViewer=null,loading=false;
+ async function loadGummies(){
+  if(loading)return;loading=true;
+  try{const url=new URL('./gummies.js',import.meta.url);url.search=new URL(import.meta.url).search;const module=await import(url.href);gummyViewer=await module.createGummyViewer(gummyHost);}
+  catch{gummyHost.dataset.state='fallback';}
+ }
+ if(gummyHost){
+  if('IntersectionObserver' in window){const lazy=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){lazy.disconnect();loadGummies();}},{rootMargin:'160px'});lazy.observe(gummyHost);}
+  else loadGummies();
+  addEventListener('pagehide',event=>{if(!event.persisted)gummyViewer?.dispose();});
+ }
 }
 if(typeof document!=='undefined')initHome();

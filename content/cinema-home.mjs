@@ -36,7 +36,7 @@ const alts={hero:'Огромная тёмная планета с восходя
 export function buildCinemaHome({products,picture,orb,lineup,trio,link}){
   const worlds=products.map((p,i)=>`${pass(p,i+1)}${path(p,i+1)}
     <section class="vg-scene" id="world-${p.id}" data-scene="${p.id}" data-place="${place[p.id]}" style="${fs(p.id)};--accent:${p.color}" aria-labelledby="vg-${p.id}">
-      ${img(p.id,alts[p.id],i+1)}
+      ${i===0?'<span id="worlds" class="vg-worlds-anchor" aria-hidden="true"></span>':''}${img(p.id,alts[p.id],i+1)}
       <div class="vg-copy">
         <p class="vg-count">${i+1} из 6 <span>${p.state}</span></p>
         <h2 class="vg-name" id="vg-${p.id}">${nm(p)}</h2>

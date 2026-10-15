@@ -2,6 +2,7 @@ import {readFile,readdir,stat} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import assert from 'node:assert/strict';
 import {recommend} from './src/home.js';
+import {runInNewContext} from 'node:vm';
 async function walk(p){let files=[];for(const e of await readdir(p,{withFileTypes:true}))files.push(...(e.isDirectory()?await walk(p+'/'+e.name):[p+'/'+e.name]));return files;}
 const files=await walk('dist');let checked=0;const errors=[];
 for(const file of files.filter(f=>f.endsWith('.html'))){
@@ -24,20 +25,32 @@ assert.match(await read('neptune'),/Коллаген гидролизованн�
 assert.match(await read('venus'),/Витамин B12<\/td><td>Количество не указано/);
 assert.ok(!(await read('earth')).includes('Коллаген гидролизованный</td><td>2000 мг'));
 // The home has real content without JS, and the quiz never ignores a caffeine/time conflict.
-for(const file of ['dist/index.html','dist/gallery/index.html']){
+for(const file of ['dist/index.html']){
  const html=await readFile(file,'utf8');
- const sectionIds=['ritual','catalog','route','home-faq-title','home-final-title'];
+ const sectionIds=['ritual','catalog','route','home-faq-title'];
  for(let i=1;i<sectionIds.length;i++)assert.ok(html.indexOf(`id="${sectionIds[i-1]}"`)<html.indexOf(`id="${sectionIds[i]}"`),`${file}: order after the flight`);
  assert.equal((html.match(/data-card="/g)||[]).length,6,`${file}: six server-rendered product cards`);
  assert.match(html,/type="module" src="\/home\.js\?v=/);
  const data=JSON.parse(html.match(/id="home-products">([^<]+)<\/script>/)[1]);
  assert.equal(data.length,6);assert.equal(new Set(data.map(p=>p.id)).size,6);
  for(const p of data){assert.ok(p.composition.length>0);assert.ok(p.url.startsWith('/worlds/'));}
+ assert.ok(!html.includes('home-final-title'),'No repeated final billboard below the FAQ');
+ assert.equal((html.match(/Шесть миров\. Один ты\./g)||[]).length,1,'The finale appears once, inside the flight');
+ assert.match(html,/data-gummies-viewer/);assert.match(html,/data-gummy-action="reset"/);
+ assert.ok(!html.includes('href="/gallery/'),'Main navigation uses one world journey');
+ assert.match(html,/id="worlds"/);
 }
+const legacy=await readFile('dist/gallery/index.html','utf8');
+assert.ok(!legacy.includes('class="gx"'),'The old gallery does not start another scroll');
+const legacyScript=legacy.match(/<script>([\s\S]*?)<\/script>/)[1];
+for(const id of ['luna','saturn','venus','mars','earth','neptune'])for(const hash of ['#'+id,'#world-'+id]){
+ let destination;runInNewContext(legacyScript,{location:{hash,replace:value=>{destination=value;}}});assert.equal(destination,'/#world-'+id);
+}
+for(const hash of ['','#worlds','#unknown']){let destination;runInNewContext(legacyScript,{location:{hash,replace:value=>{destination=value;}}});assert.equal(destination,'/#worlds');}
 for(const goal of ['luna','saturn','venus','mars','earth','neptune'])for(const time of ['morning','day','evening','flex'])for(const caffeine of ['yes','no']){
  const result=recommend({goal,time,caffeine});assert.equal(result.id,goal);assert.equal(result.conflict,goal==='saturn'&&(time==='evening'||caffeine==='no'));
 }
 assert.equal(recommend({goal:'unknown',time:'morning',caffeine:'yes'}),null);
 if(errors.length){console.error(errors.join('\n'));process.exit(1);}
 const bytes=(await Promise.all(files.map(async f=>(await stat(f)).size))).reduce((a,b)=>a+b,0);
-console.log(`PASS: ${files.filter(f=>f.endsWith('.html')).length} HTML documents, ${checked} local references, content corrections, SEO, unique IDs, post-flight sections and 48 quiz combinations. Total dist: ${(bytes/1024/1024).toFixed(2)} MB.`);
+console.log(`PASS: ${files.filter(f=>f.endsWith('.html')).length} HTML documents, ${checked} local references, content corrections, SEO, unique IDs, one finale, legacy world redirects, 3D controls and 48 quiz combinations. Total dist: ${(bytes/1024/1024).toFixed(2)} MB.`);

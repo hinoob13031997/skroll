@@ -50,6 +50,8 @@ const LIFE={
  ...space(),
  final:  {planet:[.5,1.9,1.4,.03], sun:[.56,.51,1],  water:null,     swirl:null,            fog:[0,0,0,0],       fall:null,              jar:null,              fogc:[.5,.6,.8],    tint:[220,228,255],pan:0,  z:1.1, dive:[.56,.51]}
 };
+// Pull the resting view back slightly, with less lateral pan so no image edge is exposed.
+for(const [id,life] of Object.entries(LIFE))if(!life.path&&id!=='final'){life.pan*=.55;life.z=1+(life.z-1)*.55;}
 // Frames between the worlds (сайт2/assets/plates): cruise_* open space, pass_* the planet just left slides past while
 // the next one is ahead, path_* the approach. In space the camera never dives into a point: it travels (move) —
 // from centre a to centre b, zoom z[0]→z[1] (reached at 80% of the frame's time on screen, then it keeps going),
@@ -586,7 +588,7 @@ function film(p,dt){
  let a=0;for(let i=1;i<N;i++)if(opened(i,p)>=1)a=i;
  const A=scenes[a],B=a<N-1&&opened(a+1,p)>0?scenes[a+1]:null,t=B?opened(a+1,p):0;
  const rest=clamp(p-a,0,1),breathe=Math.sin(time*.31)*.01;
- const zA=wide()?A.life.z:1.1,zB=B?(wide()?B.life.z:1.1):zA;
+ const zA=wide()?A.life.z:1.04,zB=B?(wide()?B.life.z:1.04):zA;
  // A keeps pushing in while it rests, then dives into its jar with a roll; B arrives from a close-up and unrolls
  // camera centre: the world's focus while resting, its planet/star while diving out; the next world arrives
  // centred on its own planet/star and settles on its jar
@@ -620,7 +622,7 @@ function film(p,dt){
  const intoWorld=B&&!B.life.path&&B.id!=='final';
  // leaving a world the camera flies at its planet: stronger dolly, so the jar and near rocks rush out past the edges
  const camA=A.life.move?travel(A,g(a),intoWorld?t:0):{c:mix2(A.f,A.life.dive,sstep(0,.35,t)),zoom:zA*(1+rest*.05+breathe)*(1+t*t*1.7),roll:Math.sin(time*.07)*.012+t*t*.08,blur:t*t*.16,
-  off:oa.map(v=>v*(1-t)),dolly:.1+rest*.18+t*t*1.3};
+  off:oa.map(v=>v*(1-t)),dolly:.04+rest*.08+t*t*1.3};
  // the next planet seen from the pass frame → where the path frame's planet must be: on screen a point sits at
  // (P − c)·zoom from the centre, so the same place and size means z = zoomA·rP/rQ and c = Q − (P − cA)·rQ/rP
  let match=null;
@@ -657,6 +659,10 @@ function goTo(id){const i=scenes.findIndex(s=>s.id===id);if(i<0)return;
 vg.querySelectorAll('[data-vg-go]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();goTo(a.dataset.vgGo)}));
 // "skip the flight" and "back to the start": cut instantly instead of fast-forwarding / rewinding the whole film
 function cut(top){jumpUntil=performance.now()+400;scrollTo({top,behavior:'instant'});kick()}
+function jumpWorld(id){const i=scenes.findIndex(s=>s.id===id);if(i<0)return;cut(vg.offsetTop+span()*(i+.1)/(N-1));}
+function followWorldHash(){if(location.hash==='#worlds')jumpWorld('luna');else{const match=/^#world-(luna|saturn|venus|mars|earth|neptune)$/.exec(location.hash);if(match)jumpWorld(match[1]);}}
+document.querySelectorAll('a[href$="#worlds"]').forEach(a=>a.addEventListener('click',e=>{const url=new URL(a.href);if(url.origin!==location.origin||url.pathname!==location.pathname)return;e.preventDefault();history.replaceState(null,'','#worlds');jumpWorld('luna');}));
+addEventListener('hashchange',followWorldHash);
 const skip=vg.querySelector('.vg-skip'),toTop=document.querySelector('.vg-top');
 vg.querySelectorAll('[data-vg-exit]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href'),el=h.startsWith('#')&&document.querySelector(h);if(!el)return;e.preventDefault();cut(el.getBoundingClientRect().top+scrollY);history.replaceState(null,'',h);el.querySelector('h2')?.setAttribute('tabindex','-1');el.querySelector('h2')?.focus({preventScroll:true})}));
 toTop?.addEventListener('click',e=>{e.preventDefault();cut(0);document.querySelector('.vg-start')?.focus({preventScroll:true})});
@@ -669,6 +675,8 @@ addEventListener('scroll',()=>{kick();chrome()},{passive:true});
 addEventListener('resize',()=>{measure();kick()},{passive:true});
 addEventListener('load',()=>{geometry();kick()}); // fonts and images can still move the page under the film
 measure();read();cur=target;copyAndRail(cur);kick();
+if(document.readyState==='complete')followWorldHash();
+else addEventListener('DOMContentLoaded',()=>requestAnimationFrame(followWorldHash),{once:true});
 // screenshots: #vg=<scene>[@<0..1 into the flight>][,<time s>[,<jar turn rad>]] opens that world at a fixed moment
 {const m=/^#vg=([\w-]+)(?:@([\d.]+))?(?:,([\d.]+))?(?:,(-?[\d.]+))?/.exec(location.hash);
  if(m){const i=scenes.findIndex(s=>s.id===m[1]);window.vgSnap=1;if(m[3])window.vgTime=+m[3];

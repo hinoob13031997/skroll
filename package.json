@@ -4,5 +4,5 @@
   "private": true,
   "type": "module",
   "engines": {"node": ">=20"},
-  "scripts": {"build": "node build.mjs", "dev": "node server.mjs", "start": "node server.mjs", "check": "node check.mjs"}
+  "scripts": {"build": "node build.mjs", "dev": "node server.mjs", "start": "node server.mjs", "check": "node check.mjs && node tools/check-gummies.mjs"}
 }

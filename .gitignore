@@ -7,6 +7,7 @@ node_modules/
 # Build output: build.mjs generates it (locally and on GitHub). Only the ready web images in dist/assets live in git.
 /dist/*
 !/dist/assets/
+/dist/assets/vendor/
 
 # Heavy source media and local tool settings stay on this computer only:
 # 4K masters, reference screenshots, raw videos and plates (GitHub rejects files over 100 MB; the site does not need them).
