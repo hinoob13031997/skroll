@@ -105,17 +105,17 @@ export async function createGummyViewer(host){
  }
  function requestDraw(){if(ready&&!disposed&&visible&&!document.hidden&&!raf)raf=requestAnimationFrame(draw);}
  function apply(action){pose=nextGummyPose(pose,action);velocity.yaw=velocity.pitch=0;requestDraw();}
- const onDown=e=>{if(e.button)return;grab={id:e.pointerId,x:e.clientX,y:e.clientY,t:performance.now(),touch:e.pointerType==='touch'};velocity.yaw=velocity.pitch=0;try{host.setPointerCapture(e.pointerId);}catch{}host.classList.add('is-grabbing');host.focus({preventScroll:true});};
+ const onDown=e=>{if(e.isPrimary===false){onBlur();return;}if(e.button)return;grab={id:e.pointerId,x:e.clientX,y:e.clientY,t:performance.now()};velocity.yaw=velocity.pitch=0;try{host.setPointerCapture(e.pointerId);}catch{}host.classList.add('is-grabbing');if(e.pointerType!=='touch')host.focus({preventScroll:true});};
  const onMove=e=>{if(!grab||grab.id!==e.pointerId)return;const now=performance.now(),dt=Math.max(.012,(now-grab.t)/1000),scale=2*Math.PI/host.clientWidth;
-  const yaw=(e.clientX-grab.x)*scale,pitch=(e.clientY-grab.y)*scale;pose.yaw+=yaw;pose.pitch+=grab.touch?0:pitch;shown={...pose};
-  velocity.yaw=THREE.MathUtils.clamp(yaw/dt,-3,3);velocity.pitch=grab.touch?0:THREE.MathUtils.clamp(pitch/dt,-3,3);Object.assign(grab,{x:e.clientX,y:e.clientY,t:now});requestDraw();};
+  const yaw=(e.clientX-grab.x)*scale,pitch=(e.clientY-grab.y)*scale;pose.yaw+=yaw;pose.pitch+=pitch;shown={...pose};
+  velocity.yaw=THREE.MathUtils.clamp(yaw/dt,-3,3);velocity.pitch=THREE.MathUtils.clamp(pitch/dt,-3,3);Object.assign(grab,{x:e.clientX,y:e.clientY,t:now});requestDraw();};
  const onUp=e=>{if(!grab||e.pointerId!==grab.id)return;if(performance.now()-grab.t>100||quiet()||e.type==='pointercancel')velocity.yaw=velocity.pitch=0;grab=null;host.classList.remove('is-grabbing');requestDraw();};
  const onKey=e=>{const action={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',Home:'reset',r:'reset',R:'reset'}[e.key];if(action){e.preventDefault();apply(action);}};
  const onReset=()=>apply('reset');
  const onVisibility=()=>{if(document.hidden)stop();else requestDraw();},onBlur=()=>{velocity.yaw=velocity.pitch=0;grab=null;host.classList.remove('is-grabbing');};
  const resizeObserver=new ResizeObserver(size),intersection=new IntersectionObserver(([entry])=>{visible=entry.isIntersecting;if(visible)requestDraw();else stop();});
- function revealFallback(){ready=false;stop();host.classList.remove('is-ready');host.dataset.state='fallback';fallback.removeAttribute('aria-hidden');host.removeAttribute('tabindex');caption.textContent='Жевательные пастилки Moonvit';}
- function reveal(){ready=true;host.classList.add('is-ready');host.dataset.state='ready';host.tabIndex=0;fallback.setAttribute('aria-hidden','true');caption.textContent='Потяни, чтобы повернуть';}
+ function revealFallback(){ready=false;stop();onBlur();host.classList.remove('is-ready');host.dataset.state='fallback';fallback.removeAttribute('aria-hidden');host.removeAttribute('tabindex');caption.textContent='Жевательные пастилки Moonvit';}
+ function reveal(){ready=true;host.classList.add('is-ready');host.dataset.state='ready';host.tabIndex=0;fallback.setAttribute('aria-hidden','true');caption.textContent='Потяни в любую сторону';}
  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();revealFallback();});canvas.addEventListener('webglcontextrestored',()=>{if(!disposed){reveal();requestDraw();}});
  const disposeScene=()=>{renderer.dispose();environment.dispose();environmentFaces.forEach(t=>t.dispose());photograph.dispose();geometry.dispose();material.dispose();bubbleGeometry.dispose();bubbleMaterial.dispose();};
  try{size();await renderer.compileAsync(scene,camera);if(shaderFailed)throw new Error('Gummy photographic material failed to compile');pair.rotation.set(pose.pitch,pose.yaw,0,'YXZ');renderer.render(scene,camera);host.append(canvas);reveal();}

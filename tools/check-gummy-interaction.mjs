@@ -60,7 +60,10 @@ for(const mode of ['normal','reduced','no-webgl','texture-error','shader-error']
  host.dispatch('pointerup',pointer);flush();assert.ok(lastPair.rotation.y>Math.PI*2);assert.ok(lastPair.rotation.x>Math.PI*2);
  let prevented=false;host.dispatch('keydown',{key:'Home',preventDefault:()=>{prevented=true;}});flush();assert.ok(prevented);assert.ok(Math.abs(lastPair.rotation.y+.12)<.01);assert.ok(Math.abs(lastPair.rotation.x-.06)<.01);
  const touch={...pointer,pointerType:'touch'};host.dispatch('pointerdown',touch);now+=20;host.dispatch('pointermove',{...touch,clientX:340*1.25,clientY:340});host.dispatch('pointercancel',touch);flush();
- assert.ok(lastPair.rotation.y>Math.PI*2);assert.ok(Math.abs(lastPair.rotation.x-.06)<.01,'Vertical touch remains page scroll, not model pitch');
+ assert.ok(lastPair.rotation.y>Math.PI*2);assert.ok(lastPair.rotation.x>Math.PI*2,'Touch rotates the volume vertically as well as horizontally');
+ const cancelledPose=lastPair.rotation.clone();host.dispatch('pointerdown',{...touch,clientX:50,clientY:50});
+ host.dispatch('pointerdown',{...touch,pointerId:2,isPrimary:false});host.dispatch('pointermove',{...touch,clientX:180,clientY:180});flush();
+ assert.ok(!host.classes.has('is-grabbing'),'Second finger yields to native page pinch zoom');assert.ok(Math.abs(lastPair.rotation.x-cancelledPose.x)<.01);
  host.dispatch('dblclick');flush();assert.ok(Math.abs(lastPair.rotation.y+.12)<.01);assert.ok(Math.abs(lastPair.rotation.x-.06)<.01);
  const canvas=host.children[0];canvas.dispatch('webglcontextlost',{preventDefault(){}});assert.ok(!host.classes.has('is-ready'));assert.ok(!image.attributes.has('aria-hidden'));
  canvas.dispatch('webglcontextrestored');flush();assert.ok(host.classes.has('is-ready'));
@@ -69,11 +72,15 @@ for(const mode of ['normal','reduced','no-webgl','texture-error','shader-error']
 }
 // Narrow panes must expose essentially the full composition, not a 20–30% sliver of a wide frame.
 const voyage=await readFile(new URL('../src/voyage.js',import.meta.url),'utf8');
-const frameBody=voyage.match(/function frameSpan\(aspect\)\{([\s\S]*?)\}/)[1];
-const frameSpan=runInNewContext(`(function(aspect){${frameBody}})`,{sstep:(a,b,v)=>{const t=Math.max(0,Math.min(1,(v-a)/(b-a)));return t*t*(3-2*t);}});
+const frameBody=voyage.match(/function frameSpan\(aspect,space=false\)\{([\s\S]*?)\}/)[1];
+const frameSpan=runInNewContext(`(function(aspect,space=false){${frameBody}})`,{sstep:(a,b,v)=>{const t=Math.max(0,Math.min(1,(v-a)/(b-a)));return t*t*(3-2*t);}});
 for(const aspect of [320/780,390/844,600/900,768/1024])assert.ok(frameSpan(aspect)[0]>.98);
 for(const aspect of [1758/860,1920/900,2560/1080])assert.ok(frameSpan(aspect)[1]>=1,'Wide viewports preserve the source height rather than enlarge a cropped product');
 for(const aspect of [.4,.75,1,1.3,1.55,16/9,2.4])for(const v of frameSpan(aspect))assert.ok(Number.isFinite(v)&&v>0);
+for(const aspect of [.4,.46,.65]){const plain=frameSpan(aspect),space=frameSpan(aspect,true);assert.ok(space[0]>=.7&&space[0]<=.85);assert.ok(space[1]<plain[1],'Portrait flight has its own modest framing, not a tiny repeated wide plate');}
+for(const aspect of [1.2,16/9,2.4])assert.deepEqual(frameSpan(aspect,true),frameSpan(aspect),'Desktop framing is unchanged');
+assert.ok(!voyage.includes('mod(q,2.)')&&!voyage.includes('gMir'),'No mirrored planet copies in tall viewports');
+assert.ok(!voyage.includes('sin(a*5.')&&!voyage.includes('sin(a*9.')&&!voyage.includes('SU.xy'),'No added starburst at an arbitrary light position');
 assert.ok(!voyage.includes("e.preventDefault();location.reload()"),'Context loss must not reload the site in a loop');
 assert.ok(!voyage.includes('q.x*300.,q.y*900.'),'No high-frequency water glitter');
 assert.ok(!voyage.includes('fract(uTime*7.)'),'No animated grain');
@@ -82,6 +89,9 @@ assert.ok(!voyage.includes('worlds.forEach'),'No world-wide bubble/confetti over
 assert.ok(voyage.includes("s.copy.style.transform=''"),'Copy baseline stays fixed during scrolling');
 assert.ok(voyage.includes('dolly:t*t*.35')&&voyage.includes('dolly:u2*.25'),'No discontinuous resting depth zoom at the B-to-A handoff');
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
+const homeStyles=await readFile(new URL('../src/home.css',import.meta.url),'utf8');
+assert.match(homeStyles,/\.hr-gummies-stage\.is-ready\{[^}]*touch-action:pinch-zoom/,'Only the ready viewer takes two-axis drags; native pinch zoom is retained');
+assert.match(homeStyles,/\.hr-gummies-stage\{[^}]*touch-action:pan-y/,'Loading or fallback still permits scrolling over the image');
 assert.match(styles,/\.voyage\.is-live \.vg-rail\{right:var\(--cinema-controls\)\}/,'World rail uses the viewport edge, not the 1160px content gutter');
 assert.match(styles,/\.vg-component\{[^}]*white-space:nowrap/,'Composition components do not leave a standalone vitamin letter');
 assert.match(styles,/top:clamp\(160px,33svh,360px\);bottom:auto;translate:none/,'World heading baseline is independent of copy height');

@@ -3,8 +3,8 @@
 // The stage is sticky; scroll position p runs 0..N-1 over the scenes. Each scene rests for HOLD of its segment,
 // then the camera flies into the world's planet/star and the next world opens from that point.
 // WebGL2 makes every frame living footage: camera drift/roll/parallax, water, rings, planets, fog, haze, waterfall,
-// a pulsing star, twinkling stars and light sweeping over the jar; a 2D layer adds speed streaks during flights and
-// each world's particles. Without WebGL2 the frames move with CSS (mask + scale).
+// light sweeping over the jar; a restrained 2D layer adds speed streaks only during flights.
+// Source-image stars remain untouched. Without WebGL2 the frames move with CSS (mask + scale).
 // Without JS / with reduced motion / with motion off the scenes stay stacked full-screen sections.
 (()=>{
 const vg=document.querySelector('.voyage');if(!vg)return;
@@ -57,7 +57,7 @@ for(const [id,life] of Object.entries(LIFE))if(!life.path){life.pan*=.32;life.z=
 // from centre a to centre b, zoom z[0]→z[1] (reached at 80% of the frame's time on screen, then it keeps going),
 // banking roll[0]→roll[1], and side: sideways parallax, so near asteroids stream past while planets hang far away.
 // ahead: the pass frame's first planet is the next one — the path frame takes it over at the same place and size on
-// screen (matched cut), then settles on its own route. The camera may look a little past the plate (mirrored sky, see edge()), and the
+// screen (matched cut), then settles on its own route. Frame edges fade into the dark stage without repeating planets, and the
 // feeling of going round the planets comes from the depth parallax, the banking and the globes turning (ORBS orbit).
 function space(){
  const S=(planet,fogc,tint,move,dive)=>({planet,sun:null,water:null,swirl:null,fog:[0,0,0,0],fall:null,jar:null,fogc,tint,pan:0,z:1.08,dive:dive||move.b,path:1,move});
@@ -119,7 +119,7 @@ let W=stage.clientWidth||innerWidth,H=stage.clientHeight||innerHeight,quality=1;
 const wide=()=>W/H>1.15;
 // Fit the whole composition: tall panes keep its width, wide screens keep its height.
 // CPU hit testing and the shader share this framing; extra space fades into the dark stage.
-function frameSpan(aspect){const a=16/9;return[Math.max(1,aspect/a),Math.max(1,a/aspect)];}
+function frameSpan(aspect,space=false){const a=16/9,k=space ? .72+.28*sstep(.65,1.15,aspect) : 1;return[Math.max(1,aspect/a)*k,Math.max(1,a/aspect)*k];}
 const focusOf=s=>{const cs=getComputedStyle(s.el);return[parseFloat(cs.getPropertyValue('--fx'))/100,parseFloat(cs.getPropertyValue('--fy'))/100]};
 scenes.forEach(s=>{s.f=focusOf(s);s.life=LIFE[s.id]||LIFE.hero;s.g=0;
  s.orbs=(ORBS[s.id]||[]).map(o=>({...o,ang:o.ang0||0,vel:0,s}));s.can=CAN[s.id]||null;s.spin=0;s.spinV=0});
@@ -156,13 +156,14 @@ float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<4;i++){v+=a*noise(p);p=p*2.03+vec2(17.1,9.2);a*=.5;}return v;}
 const vec2 K=vec2(1.7778,1.);
-vec2 cover(vec2 s,vec2 f){
- vec2 v=vec2(max(1.,uAspect/uImgA),max(1.,uImgA/uAspect));
+vec2 cover(vec2 s,vec2 f,float space){
+ float k=mix(1.,.72+.28*ss(.65,1.15,uAspect),space);
+ vec2 v=vec2(max(1.,uAspect/uImgA),max(1.,uImgA/uAspect))*k;
  return f*(1.-v)+s*v;
 }
 // camera: pan, zoom + roll around the focus, parallax (lower = nearer), idle drift
 vec2 camera(int b,vec2 s){
- vec4 P=uS[b];vec2 f=P.xy,pan=uS[b+7].yw;vec2 q=cover(s-pan,f);
+ vec4 P=uS[b];vec2 f=P.xy,pan=uS[b+7].yw;vec2 q=cover(s-pan,f,uS[b+7].z);
  vec2 d=(q-f)*K;float a=P.w;d=mat2(cos(a),sin(a),-sin(a),cos(a))*d;d/=P.z;
  q=f+d/K;
  return q+uCam*(.35+ss(.2,1.,q.y)*1.3);
@@ -199,17 +200,16 @@ vec2 living(int b,int k,vec2 q,float dep){
   q.x+=(noise(vec2(q.x*170.,q.y*5.-t*4.5))-.5)*.003*m;q.y-=noise(vec2(q.x*80.,q.y*3.-t*3.2))*.005*m;}
  return q;
 }
-// outside the frame: worlds hold their edge; open space continues as its mirror image (stars and nebula have no
-// direction), so the camera can travel past the plate's border without a stretched edge
-float gMir=0.;
-vec2 edge(vec2 q){return gMir>0.?1.-abs(1.-mod(q,2.)):clamp(q,.001,.999);}
+// Never mirror source images: on a tall phone that repeated the same planet two or three times.
+// Samples stay within the original image; scene() softly mattes its border into the dark stage.
+vec2 edge(vec2 q){return clamp(q,.001,.999);}
 vec3 tex(sampler2D T,vec2 q,vec2 f,float blur){
  if(blur<.002)return texture(T,edge(q)).rgb;
  vec3 c=vec3(0);for(int i=0;i<12;i++){float k=float(i)/11.;c+=texture(T,edge(f+(q-f)*(1.-blur*k))).rgb;}
  return c/12.;
 }
 vec3 light(int b,int k,vec2 q,vec3 col){
- float t=uTime;vec4 PL=uS[b+1],WA=uS[b+3],FO=uS[b+4],SU=uS[b+6],J=uJar[k];
+ float t=uTime;vec4 PL=uS[b+1],WA=uS[b+3],FO=uS[b+4],J=uJar[k];
  vec3 tint=uTint[k]/255.;
  float lum=dot(col,vec3(.299,.587,.114));
  if(FO.z>0.){ // drifting mist
@@ -225,11 +225,7 @@ vec3 light(int b,int k,vec2 q,vec3 col){
   float e=exp(-pow((q.x-J.y+.008)/.009,2.))+.7*exp(-pow((q.x-J.x-.008)/.009,2.));
   col+=tint*e*m*(.12+.1*sin(t*1.3));
   col+=tint*exp(-pow((q.y-J.w)/.025,2.))*ss(J.x-.06,J.x+.06,q.x)*ss(J.y+.06,J.y-.06,q.x)*(.14+.08*sin(t*.9+1.));}
- if(SU.z>0.){ // pulsing star with slowly turning rays
-  vec2 d=(q-SU.xy)*K;float r=length(d),a=atan(d.y,d.x),pulse=1.;
-  vec3 sc=mix(vec3(1.,.8,.55),tint,.35);
-  col+=sc*(.0022/(r*r+.0022))*.4*SU.z*pulse;
-  col+=sc*(pow(max(0.,sin(a*5.+t*.12)),30.)+.6*pow(max(0.,sin(a*9.-t*.08+1.3)),50.))*exp(-r*4.5)*.3*SU.z*pulse;}
+ // Natural sunlight is already photographed into the frame. No second, misaligned starburst overlay.
  // Stars are already in the source image; do not sprinkle flickering points over rocks and water.
  return col;
 }
@@ -294,11 +290,11 @@ vec3 orbs(sampler2D T,int k,vec2 q,vec3 col,float dep,float blur){
  return col;
 }
 vec3 scene(sampler2D T,sampler2D D,int b,int k,vec2 s,float blur,out float dep){
- gMir=uS[b+7].z;vec2 q=march(D,camera(b,s),uS[b].xy,uC3[k],dep);
+ vec2 q=march(D,camera(b,s),uS[b].xy,uC3[k],dep);
  gJarShade=1.;q=living(b,k,q,dep);
  vec3 colour=light(b,k,q,orbs(T,k,q,tex(T,q,uS[b].xy,blur),dep,blur)*gJarShade);
  float matte=ss(-.012,.018,q.x)*ss(1.012,.982,q.x)*ss(-.018,.025,q.y)*ss(1.018,.975,q.y);
- return mix(vec3(.012,.016,.02),colour,gMir>.5?1.:matte);
+ return mix(vec3(.012,.016,.02),colour,matte);
 }
 void main(){
  vec2 s=vUv;float dA,dB;
@@ -548,7 +544,7 @@ function copyAndRail(p){
 // screen uv → frame uv for the scene at rest (the shader's camera() without the depth march): hit tests only
 let view=null; // {s,cam,sway} of the world on screen, null during flights
 function toImage(sx,sy){
- const{s,cam,sway}=view,v=frameSpan(W/H),f=cam.c,pan=cam.pan||[wide()?s.life.pan:0,0];
+ const{s,cam,sway}=view,v=frameSpan(W/H,!!s.life.path),f=cam.c,pan=cam.pan||[wide()?s.life.pan:0,0];
  let q=[f[0]*(1-v[0])+(sx-pan[0])*v[0],f[1]*(1-v[1])+(sy-pan[1])*v[1]];
  let dx=(q[0]-f[0])*16/9,dy=q[1]-f[1];const c=Math.cos(cam.roll),n=Math.sin(cam.roll);
  [dx,dy]=[(c*dx-n*dy)/cam.zoom,(n*dx+c*dy)/cam.zoom];
@@ -619,7 +615,7 @@ function film(p,dt){
   let c=mix2(M.a,M.b,e),zoom=M.z[0]+(M.z[1]-M.z[0])*gi/.8;
   if(match){const m=sstep(.25,.6,gi);c=mix2(match.c,c,m);zoom=match.z+(zoom-match.z)*m}
   zoom*=1+dive*dive*1.3;
-  const asp=W/H,hx=.5*Math.min(1,asp/(16/9))/zoom-.1,hy=.5*Math.min(1,16/9/asp)/zoom-.06; // at most a little of the mirrored sky
+  const asp=W/H,hx=.5*Math.min(1,asp/(16/9))/zoom-.1,hy=.5*Math.min(1,16/9/asp)/zoom-.06; // a small overscan fades out; it never reflects the image
   c=[clamp(c[0],hx,1-hx),clamp(c[1],hy,1-hy)];
   return{c,pan:[.5-c[0],.5-c[1]],zoom,roll:M.roll[0]+(M.roll[1]-M.roll[0])*gi+Math.sin(time*.07)*.008,
    blur:dive*dive*.14,off:[M.side*(1-2*gi)+mx*.02,Math.sin(time*.13)*.004+my*.012],dolly:.05+.1*gi+dive*dive*.3,pivot:.03}}; // a strong depth dolly would swell the planets and smear the edges
