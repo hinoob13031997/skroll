@@ -4,24 +4,27 @@ import {createHash} from 'node:crypto';
 import {products} from './content/products.mjs';
 import {buildCinemaHome,buildHomeRest} from './content/cinema-home.mjs';
 import {buildGallery} from './content/gallery-home.mjs';
-const origin=process.env.SITE_URL||'https://moonvit-universe.hinoob13031997.chatgpt.site';
+const origin=(process.env.SITE_URL||'https://moonvit-universe.hinoob13031997.chatgpt.site').replace(/\/+$/,'');
+const base='/'+(process.env.BASE_PATH||'').replace(/^\/+|\/+$/g,'');
+const basePath=base==='/'?'':base;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const routes=[];
 const link=(url,label,cls='',aria='')=>`<a class="${cls}" href="${esc(url)}"${aria?` aria-label="${esc(aria)}"`:''}${url.startsWith('https:')?' target="_blank" rel="noopener noreferrer"':''}>${label}</a>`;
 const header=`<a href="#main" class="skip">Перейти к содержанию</a><header class="header"><a href="/" class="logo" aria-label="Moonvit — главная">moonvit<span>®</span></a><nav class="desktop-nav" aria-label="Основная навигация"><a href="/">Главная</a><a href="/gallery/#worlds">Миры</a><a href="/catalog/">Продукты</a><a href="/about/">О бренде</a><a href="/journal/">Journal</a><a href="/partners/">Сотрудничество</a><a href="/contacts/">Контакты</a></nav><div class="header-actions"><a class="shop-link" href="/catalog/">Выбрать свой мир <span aria-hidden="true">↗</span></a><button class="menu-button" aria-label="Открыть меню" aria-expanded="false" aria-controls="mobile-menu">Меню <span aria-hidden="true">☰</span></button></div></header><nav id="mobile-menu" class="mobile-menu" aria-label="Мобильная навигация" hidden><a href="/">Главная</a><a href="/gallery/#worlds">Миры</a><a href="/catalog/">Продукты</a><a href="/about/">О бренде</a><a href="/journal/">Journal</a><a href="/partners/">Сотрудничество</a><a href="/contacts/">Контакты</a></nav>`;
 const footer=`<footer class="footer"><div class="footer-top"><a href="/" class="logo">moonvit<span>®</span></a><p>Твоя вселенная начинается внутри.</p><a href="/catalog/" class="text-link">Найти свой мир ↗</a></div><div class="footer-links"><nav aria-label="О бренде"><a href="/">Главная</a><a href="/catalog/">Продукты</a><a href="/about/">О бренде</a><a href="/journal/">Journal</a><a href="/partners/">Сотрудничество</a><a href="/contacts/">Контакты</a></nav><nav aria-label="Документы"><a href="/legal/delivery/">Доставка и возврат</a><a href="/legal/offer/">Публичная оферта</a><a href="/legal/privacy/">Конфиденциальность</a><a href="/legal/agreement/">Обработка данных</a><a href="/legal/details/">Реквизиты</a></nav><nav aria-label="Связь"><a href="mailto:pr@moonvit.space">pr@moonvit.space</a>${link('https://t.me/moonvit_ru','Telegram ↗')}${link('https://vk.com/moonvit.life','ВКонтакте ↗')}</nav></div><p class="credit">Текстуры планет и неба: ${link('https://www.solarsystemscope.com/textures/','Solar System Scope')}, CC BY 4.0.</p><div class="footer-bottom"><span>© ${new Date().getFullYear()} Moonvit</span><p>БАД. Не является лекарственным средством. Перед применением ознакомьтесь с этикеткой и проконсультируйтесь со специалистом.</p><button id="motion-toggle" type="button" aria-pressed="false">Движение: вкл.</button></div></footer>`;
-// Every page: display serif + UI grotesk (both with Cyrillic).
-const fontsHead='<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Manrope:wght@300;400;500;600&display=swap">';
-// /voyage/ only: the scroll film through the worlds (src/voyage.js). Home: the dive + curved wall of worlds (src/gallery.js).
+// One self-hosted variable family, including Cyrillic; no remote font request / fallback typography drift.
+const fontsHead='<link rel="preload" href="/assets/fonts/onest-variable.ttf" as="font" type="font/ttf" crossorigin>';
+// Home: the scroll film (src/voyage.js). /gallery/: the dive + curved wall (src/gallery.js).
 // ?v=<hash of the sources>: after a deploy browsers never mix a new page with yesterday's cached styles or scripts
-const ver=createHash('sha1').update(['styles.css','app.js','voyage.js','gallery.js'].map(f=>readFileSync('src/'+f)).join('')).digest('hex').slice(0,8);
+const ver=createHash('sha1').update(['styles.css','app.js','voyage.js','gallery.js','home.css','home.js','gummies.js','gummy-shape.js'].map(f=>readFileSync('src/'+f)).join('')).digest('hex').slice(0,8);
 const filmHead=`<script src="/voyage.js?v=${ver}" defer></script>`;
 const galleryHead=`<script src="/gallery.js?v=${ver}" defer></script>`;
+const homeHead=`<link rel="stylesheet" href="/home.css?v=${ver}"><script type="module" src="/home.js?v=${ver}"></script>`;
 async function page(path,title,description,body,options={}){
  const url=origin+path;routes.push(path);
  const json=options.product?{'@context':'https://schema.org','@type':'Product',name:`Moonvit ${options.product.name} — ${options.product.title}`,description:options.product.description,image:origin+'/assets/'+options.product.id+'-pack.webp',brand:{'@type':'Brand',name:'Moonvit'}}:{'@context':'https://schema.org','@type':'WebPage',name:title,url,description};
  const html=`<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#080a0d"><title>${esc(title)} | Moonvit</title><meta name="description" content="${esc(description)}"><link rel="canonical" href="${esc(url)}"><meta property="og:type" content="website"><meta property="og:locale" content="ru_RU"><meta property="og:title" content="${esc(title)} | Moonvit"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url)}"><meta property="og:image" content="${esc(origin+'/assets/'+(options.product?options.product.id+'-cinema':'hero')+'.webp')}"><meta name="twitter:card" content="summary_large_image"><link rel="icon" href="/favicon.svg" type="image/svg+xml">${fontsHead}<link rel="stylesheet" href="/styles.css?v=${ver}">${options.film?filmHead:''}${options.gallery?galleryHead:''}<script type="application/ld+json">${JSON.stringify(json).replace(/</g,'\\u003c')}</script><script src="/app.js?v=${ver}" defer></script></head><body>${header}<main id="main">${body}</main>${footer}</body></html>`;
- const dest=path==='/'?'dist/index.html':`dist${path}index.html`;await mkdir(dest.slice(0,dest.lastIndexOf('/')),{recursive:true});await writeFile(dest,html);
+ const dest=path==='/'?'dist/index.html':`dist${path}index.html`;await mkdir(dest.slice(0,dest.lastIndexOf('/')),{recursive:true});await writeFile(dest,options.home?html.replace('</head>',homeHead+'</head>'):html);
 }
 // A world frame in three sizes from its 4K master: 1280 (cards), 1920 (2K screens), 2880 (Retina / 4K) — the browser
 // picks by the width it actually draws. Phones get a 9:16 cut of the master for full-screen backgrounds.
@@ -48,16 +51,20 @@ const glyphs={
  spiral:'<path d="M24 24c0-3 4-3 4 0 0 5-8 5-8 0 0-7 12-7 12 0 0 9-16 9-16 0 0-11 20-11 20 0"/>'
 };
 const glyph=k=>`<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">${glyphs[k]}</svg>`;
-const home2=buildGallery({products})+buildHomeRest({lineup,trio,link,products});
+const home2=buildGallery({products})+buildHomeRest({products,trio});
 // Home is the flight through the worlds (the version the video was shot from); the dive + wall of worlds lives on /gallery/.
-await page('/','Путешествие по шести мирам','Кинематографичный полёт через шесть миров Moonvit: Luna, Saturn, Venus, Mars, Earth и Neptune.',buildCinemaHome({products,sectionHead,picture,link,orb,lineup,trio}),{film:true});
-await page('/gallery/','Шесть миров — что тебе нужно сегодня?','Шесть миров Moonvit. Жевательные витамины для ежедневной заботы о себе: Luna, Saturn, Venus, Mars, Earth и Neptune.',home2,{gallery:true});
+await page('/','Путешествие по шести мирам','Кинематографичный полёт через шесть миров Moonvit: Luna, Saturn, Venus, Mars, Earth и Neptune.',buildCinemaHome({products,sectionHead,picture,link,orb,lineup,trio})+buildHomeRest({products,trio}),{film:true,home:true});
+await page('/gallery/','Шесть миров — что тебе нужно сегодня?','Шесть миров Moonvit. Жевательные витамины для ежедневной заботы о себе: Luna, Saturn, Venus, Mars, Earth и Neptune.',home2,{gallery:true,home:true});
 // Old address of the flight: forward to the home page, keeping #vg=… screenshot links.
 await mkdir('dist/voyage',{recursive:true});
 await writeFile('dist/voyage/index.html',`<!doctype html><html lang="ru"><head><meta charset="UTF-8"><title>Путешествие по шести мирам | Moonvit</title><meta name="description" content="Путешествие по шести мирам Moonvit теперь на главной странице."><link rel="canonical" href="${esc(origin+'/')}"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0; url=/"><script>location.replace('/'+location.hash)</script></head><body><h1>Путешествие теперь на <a href="/">главной</a></h1></body></html>`);
 await mkdir('dist',{recursive:true});
 await writeFile('dist/favicon.svg','<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#080a0d"/><text x="32" y="43" text-anchor="middle" font-family="Arial" font-size="42" fill="#f5f3ed">m</text></svg>');
 await copyFile('src/styles.css','dist/styles.css');await copyFile('src/app.js','dist/app.js');await copyFile('src/voyage.js','dist/voyage.js');await copyFile('src/gallery.js','dist/gallery.js');
+await copyFile('src/home.css','dist/home.css');await copyFile('src/home.js','dist/home.js');
+await copyFile('src/gummies.js','dist/gummies.js');await copyFile('src/gummy-shape.js','dist/gummy-shape.js');
+await mkdir('dist/assets/vendor',{recursive:true});
+for(const file of ['three.module.js','three.core.js','THREE-LICENSE.txt'])await copyFile('vendor/three/'+file,'dist/assets/vendor/'+file);
 const head=(label,title,desc='')=>`<section class="page-head"><p class="eyebrow">${label}</p><h1>${title}</h1>${desc?`<p>${desc}</p>`:''}</section>`;
 await page('/catalog/','Коллекция — шесть миров','Все шесть комплексов Moonvit: составы, вкусы, способы приёма и официальные каналы покупки.',head('Коллекция Moonvit','Шесть миров.<br><em>Один ты.</em>','Каждая формула — отдельное направление заботы о себе. Познакомься с составом, выбери свой вкус и ритуал.')+`<section class="content-section">${cards()}</section>`);
 function composition(p){
@@ -107,14 +114,15 @@ await writeFile('dist/_redirects','/news /journal/ 301\n/products /catalog/ 301\
 // Hosting under a sub-path (GitHub Pages: https://hinoob13031997.github.io/skroll/): BASE_PATH=/skroll prefixes every
 // root-relative link to the site's own files and pages in the generated HTML, styles and scripts. Running it twice is
 // harmless; without BASE_PATH (local preview) nothing changes.
-const base=(process.env.BASE_PATH||'').replace(/\/+$/,'');
-if(base){
+if(basePath){
  const tops=(await readdir('dist')).sort((a,b)=>b.length-a.length).map(n=>n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
  const rx=new RegExp(`(?<=["'\`(,\\s=])/(?=(?:${tops})(?:[/"'\`)#?\\s,]|$)|["'\`#?)])`,'g');
  async function rebase(dir){for(const e of await readdir(dir,{withFileTypes:true})){const p=dir+'/'+e.name;
   if(e.isDirectory()){if(e.name!=='assets')await rebase(p);continue;}
   if(!/\.(html|css|js)$/.test(e.name))continue;
-  const s=await readFile(p,'utf8'),t=s.replace(rx,base+'/');if(t!==s)await writeFile(p,t);}}
+  const s=await readFile(p,'utf8'),t=s.replace(rx,basePath+'/');if(t!==s)await writeFile(p,t);}}
  await rebase('dist');
 }
-console.log(`Built ${routes.length} routes${base?` for ${base}/`:''}. All content is server-independent HTML.`);
+// Checks read the actual build configuration, including when validating a sub-path deployment locally.
+await writeFile('dist/build-info.json',JSON.stringify({basePath,siteUrl:origin,routes,version:ver},null,2)+'\n');
+console.log(`Built ${routes.length} routes${basePath?` for ${basePath}/`:''}. All content is server-independent HTML.`);

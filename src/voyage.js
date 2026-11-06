@@ -3,19 +3,26 @@
 // The stage is sticky; scroll position p runs 0..N-1 over the scenes. Each scene rests for HOLD of its segment,
 // then the camera flies into the world's planet/star and the next world opens from that point.
 // WebGL2 makes every frame living footage: camera drift/roll/parallax, water, rings, planets, fog, haze, waterfall,
-// a pulsing star, twinkling stars and light sweeping over the jar; a 2D layer adds speed streaks during flights and
-// each world's particles. Without WebGL2 the frames move with CSS (mask + scale).
+// light sweeping over the jar; a restrained 2D layer adds speed streaks only during flights.
+// Source-image stars remain untouched. Without WebGL2 the frames move with CSS (mask + scale).
 // Without JS / with reduced motion / with motion off the scenes stay stacked full-screen sections.
 (()=>{
 const vg=document.querySelector('.voyage');if(!vg)return;
 let off=matchMedia('(prefers-reduced-motion: reduce)').matches;
 try{if(localStorage.getItem('moonvit-motion')==='off')off=true}catch{}
 document.querySelector('#motion-toggle')?.addEventListener('click',()=>setTimeout(()=>location.reload(),50));
-if(off)return;
+if(off){document.querySelectorAll('[data-vg-src]').forEach(im=>{im.loading='lazy';im.src=im.dataset.vgSrc});return}
 
 const stage=vg.querySelector('.vg-stage');
 const scenes=[...vg.querySelectorAll('.vg-scene')].map(el=>({el,id:el.dataset.scene,img:el.querySelector('.vg-img'),copy:el.querySelector('.vg-copy')}));
-const N=scenes.length,HOLD=.34,SEG=115; // SEG: svh of scroll per scene (worlds and the space between them)
+const N=scenes.length;
+// Product worlds receive time to read; the space shots are brief connective cuts. The whole journey
+// takes about 9.7 screens instead of 24.7 while retaining every scene and its existing bookmark.
+const hold=i=>scenes[i].el.classList.contains('vg-path')?.08:.6;
+const stops=[0];scenes.slice(0,-1).forEach((s,i)=>stops.push(stops[i]+(i===0?80:s.el.classList.contains('vg-path')?14:90)));
+const travelLength=stops[N-1];
+const position=p=>{const i=Math.min(N-2,Math.max(0,Math.floor(p)));return (stops[i]+(stops[i+1]-stops[i])*(p-i))/travelLength};
+const progress=k=>{const x=clamp(k)*travelLength;let i=0;while(i<N-2&&x>=stops[i+1])i++;return i+(x-stops[i])/(stops[i+1]-stops[i])};
 // a frame on the way belongs to the world it leads to
 const worldOf=id=>({'cruise-a':'luna','cruise-b':'final'})[id]||id.replace(/^(path|pass)-/,'');
 // transitions (shader uKind): 0 into open space (dark + star streaks), 1 mist, 2 golden ring, 3 pearl glare,
@@ -50,12 +57,14 @@ const LIFE={
  ...space(),
  final:  {planet:[.5,1.9,1.4,.03], sun:[.56,.51,1],  water:null,     swirl:null,            fog:[0,0,0,0],       fall:null,              jar:null,              fogc:[.5,.6,.8],    tint:[220,228,255],pan:0,  z:1.1, dive:[.56,.51]}
 };
+// Rest on the complete composition, not a permanently enlarged close-up. Flights keep their own camera.
+for(const [id,life] of Object.entries(LIFE))if(!life.path){life.pan*=.32;life.z=id==='hero'?1.015:id==='final'?1.03:.94;}
 // Frames between the worlds (сайт2/assets/plates): cruise_* open space, pass_* the planet just left slides past while
 // the next one is ahead, path_* the approach. In space the camera never dives into a point: it travels (move) —
 // from centre a to centre b, zoom z[0]→z[1] (reached at 80% of the frame's time on screen, then it keeps going),
 // banking roll[0]→roll[1], and side: sideways parallax, so near asteroids stream past while planets hang far away.
 // ahead: the pass frame's first planet is the next one — the path frame takes it over at the same place and size on
-// screen (matched cut), then settles on its own route. The camera may look a little past the plate (mirrored sky, see edge()), and the
+// screen (matched cut), then settles on its own route. Frame edges fade into the dark stage without repeating planets, and the
 // feeling of going round the planets comes from the depth parallax, the banking and the globes turning (ORBS orbit).
 function space(){
  const S=(planet,fogc,tint,move,dive)=>({planet,sun:null,water:null,swirl:null,fog:[0,0,0,0],fall:null,jar:null,fogc,tint,pan:0,z:1.08,dive:dive||move.b,path:1,move});
@@ -110,11 +119,14 @@ const CAN={luna:[.359,.641,.258,.738],saturn:[.361,.640,.253,.731],venus:[.3515,
  earth:[.304,.5785,.284,.733],neptune:[.349,.65,.276,.787]};
 
 vg.classList.add('is-live');
-vg.style.height=`${(N-1)*SEG+170}svh`; // +70: the final frame rests before the page moves on (REST below)
+vg.style.height=`${travelLength+170}svh`; // +70: the final frame rests before the page moves on (REST below)
 
 // the stage is 100svh: its size, not innerHeight (which jumps with a phone's toolbar), sets the picture's geometry
 let W=stage.clientWidth||innerWidth,H=stage.clientHeight||innerHeight,quality=1;
 const wide=()=>W/H>1.15;
+// Fit the whole composition: tall panes keep its width, wide screens keep its height.
+// CPU hit testing and the shader share this framing; extra space fades into the dark stage.
+function frameSpan(aspect,space=false){const a=16/9,k=space ? .72+.28*sstep(.65,1.15,aspect) : 1;return[Math.max(1,aspect/a)*k,Math.max(1,a/aspect)*k];}
 const focusOf=s=>{const cs=getComputedStyle(s.el);return[parseFloat(cs.getPropertyValue('--fx'))/100,parseFloat(cs.getPropertyValue('--fy'))/100]};
 scenes.forEach(s=>{s.f=focusOf(s);s.life=LIFE[s.id]||LIFE.hero;s.g=0;
  s.orbs=(ORBS[s.id]||[]).map(o=>({...o,ang:o.ang0||0,vel:0,s}));s.can=CAN[s.id]||null;s.spin=0;s.spinV=0});
@@ -126,7 +138,7 @@ const BAR=[scenes.findIndex(s=>s.id==='cruise-a'),scenes.findIndex(s=>s.id==='ne
 const onScreen=(s,pt=s.f)=>wide()?[pt[0]+s.life.pan,pt[1]]:pt;
 function reach(s){const[fx,fy]=onScreen(s);s.max=Math.hypot(Math.max(fx,1-fx)*W,Math.max(fy,1-fy)*H)+120}
 // how far scene i has opened at position p (hero is always open)
-const opened=(i,p)=>i===0?1:.5-.5*Math.cos(Math.PI*clamp((p-(i-1+HOLD))/(1-HOLD))); // gentle, even flight speed
+const opened=(i,p)=>i===0?1:.5-.5*Math.cos(Math.PI*clamp((p-(i-1+hold(i-1)))/(1-hold(i-1))));
 
 /* ───────────── WebGL renderer ───────────── */
 const VS=`#version 300 es
@@ -151,10 +163,14 @@ float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<4;i++){v+=a*noise(p);p=p*2.03+vec2(17.1,9.2);a*=.5;}return v;}
 const vec2 K=vec2(1.7778,1.);
-vec2 cover(vec2 s,vec2 f){vec2 v=vec2(min(1.,uAspect/uImgA),min(1.,uImgA/uAspect));return f*(1.-v)+s*v;}
+vec2 cover(vec2 s,vec2 f,float space){
+ float k=mix(1.,.72+.28*ss(.65,1.15,uAspect),space);
+ vec2 v=vec2(max(1.,uAspect/uImgA),max(1.,uImgA/uAspect))*k;
+ return f*(1.-v)+s*v;
+}
 // camera: pan, zoom + roll around the focus, parallax (lower = nearer), idle drift
 vec2 camera(int b,vec2 s){
- vec4 P=uS[b];vec2 f=P.xy,pan=uS[b+7].yw;vec2 q=cover(s-pan,f);
+ vec4 P=uS[b];vec2 f=P.xy,pan=uS[b+7].yw;vec2 q=cover(s-pan,f,uS[b+7].z);
  vec2 d=(q-f)*K;float a=P.w;d=mat2(cos(a),sin(a),-sin(a),cos(a))*d;d/=P.z;
  q=f+d/K;
  return q+uCam*(.35+ss(.2,1.,q.y)*1.3);
@@ -182,10 +198,7 @@ vec2 living(int b,int k,vec2 q,float dep){
  if(PL.w>0.){ // planet slowly turns on its axis
   vec2 d=(q-PL.xy)*K/PL.z;float rr=dot(d,d);
   if(rr<1.){float z=sqrt(1.-rr),a=sin(t*.09)*PL.w;q=mix(q,PL.xy+vec2(cos(a)*d.x+sin(a)*z,d.y)*PL.z/K,ss(1.,.86,rr));}}
- if(WA.x<1.&&q.y>WA.x){ // water: perspective ripples
-  float hy=WA.x,d=(q.y-hy)/(1.-hy),w=(q.y-hy)/(d+.12);
-  float n=noise(vec2(q.x*16.,w*55.)+vec2(t*.12,-t*.8)),n2=noise(vec2(q.x*40.,w*130.)+vec2(-t*.18,-t*1.3));
-  q+=vec2((n-.5)*.005,(n2-.5)*.007)*WA.y*(.2+d)*ss(0.,.025,q.y-hy);}
+ // Water keeps the photographed surface. The old high-frequency displacement also crossed the jar's label.
  if(FO.w>0.){ // heat haze
   float band=ss(FO.x-.15,FO.x,q.y)*ss(FO.y+.25,FO.y,q.y);
   q+=vec2(noise(q*vec2(40,70)+vec2(0,-t*.9))-.5,noise(q*vec2(45,60)+vec2(5,-t*.7))-.5)*.0035*FO.w*band*far;}
@@ -194,23 +207,22 @@ vec2 living(int b,int k,vec2 q,float dep){
   q.x+=(noise(vec2(q.x*170.,q.y*5.-t*4.5))-.5)*.003*m;q.y-=noise(vec2(q.x*80.,q.y*3.-t*3.2))*.005*m;}
  return q;
 }
-// outside the frame: worlds hold their edge; open space continues as its mirror image (stars and nebula have no
-// direction), so the camera can travel past the plate's border without a stretched edge
-float gMir=0.;
-vec2 edge(vec2 q){return gMir>0.?1.-abs(1.-mod(q,2.)):clamp(q,.001,.999);}
+// Never mirror source images: on a tall phone that repeated the same planet two or three times.
+// Samples stay within the original image; scene() softly mattes its border into the dark stage.
+vec2 edge(vec2 q){return clamp(q,.001,.999);}
 vec3 tex(sampler2D T,vec2 q,vec2 f,float blur){
  if(blur<.002)return texture(T,edge(q)).rgb;
  vec3 c=vec3(0);for(int i=0;i<12;i++){float k=float(i)/11.;c+=texture(T,edge(f+(q-f)*(1.-blur*k))).rgb;}
  return c/12.;
 }
 vec3 light(int b,int k,vec2 q,vec3 col){
- float t=uTime;vec4 PL=uS[b+1],WA=uS[b+3],FO=uS[b+4],SU=uS[b+6],J=uJar[k];
+ float t=uTime;vec4 PL=uS[b+1],WA=uS[b+3],FO=uS[b+4],J=uJar[k];
  vec3 tint=uTint[k]/255.;
  float lum=dot(col,vec3(.299,.587,.114));
  if(FO.z>0.){ // drifting mist
   float band=ss(FO.x-.12,FO.x+.05,q.y)*ss(FO.y+.12,FO.y-.05,q.y);
   col+=uFogC[k]*fbm(q*vec2(4.,6.)+vec2(t*.035,t*.01))*fbm(q*vec2(9.,5.)-vec2(t*.02,0))*FO.z*band*1.4;}
- if(WA.x<1.&&q.y>WA.x){col+=pow(noise(vec2(q.x*300.,q.y*900.)+vec2(t*.6,-t*2.2)),16.)*WA.y*(.4+lum*2.)*.9;} // glints
+ // No screen-space water glitter: subpixel white dashes alias into horizontal rippling bands.
  if(PL.z>0.){float r=length((q-PL.xy)*K)/PL.z;col+=col*ss(.9,1.,r)*ss(1.06,1.,r)*(.35+.25*sin(t*.7));} // breathing limb
  if(J.y>J.x){ // light sweeping over the jar + breathing rim light on its edges and on the ground under it
   float m=ss(J.x,J.x+.015,q.x)*ss(J.y,J.y-.015,q.x)*ss(J.z,J.z+.03,q.y)*ss(J.w,J.w-.02,q.y);
@@ -220,14 +232,8 @@ vec3 light(int b,int k,vec2 q,vec3 col){
   float e=exp(-pow((q.x-J.y+.008)/.009,2.))+.7*exp(-pow((q.x-J.x-.008)/.009,2.));
   col+=tint*e*m*(.12+.1*sin(t*1.3));
   col+=tint*exp(-pow((q.y-J.w)/.025,2.))*ss(J.x-.06,J.x+.06,q.x)*ss(J.y+.06,J.y-.06,q.x)*(.14+.08*sin(t*.9+1.));}
- if(SU.z>0.){ // pulsing star with slowly turning rays
-  vec2 d=(q-SU.xy)*K;float r=length(d),a=atan(d.y,d.x),pulse=.85+.15*sin(t*1.1)+.05*sin(t*3.7);
-  vec3 sc=mix(vec3(1.,.8,.55),tint,.35);
-  col+=sc*(.0022/(r*r+.0022))*.4*SU.z*pulse;
-  col+=sc*(pow(max(0.,sin(a*5.+t*.12)),30.)+.6*pow(max(0.,sin(a*9.-t*.08+1.3)),50.))*exp(-r*4.5)*.3*SU.z*pulse;}
- vec2 g=q*vec2(760.,428.);float h=hash(floor(g)); // twinkling stars in the dark sky
- if(h>.994){float st=ss(.35,0.,length(fract(g)-.5)),tw=.35+.65*pow(.5+.5*sin(t*(1.5+h*5.)+h*80.),3.);
-  col+=vec3(.85,.9,1.)*st*tw*(1.-ss(.05,.2,lum));}
+ // Natural sunlight is already photographed into the frame. No second, misaligned starburst overlay.
+ // Stars are already in the source image; do not sprinkle flickering points over rocks and water.
  return col;
 }
 // real parallax from the depth map: march the view ray from the near plane (L=1) to the far one (L=0) and take the
@@ -291,9 +297,11 @@ vec3 orbs(sampler2D T,int k,vec2 q,vec3 col,float dep,float blur){
  return col;
 }
 vec3 scene(sampler2D T,sampler2D D,int b,int k,vec2 s,float blur,out float dep){
- gMir=uS[b+7].z;vec2 q=march(D,camera(b,s),uS[b].xy,uC3[k],dep);
+ vec2 q=march(D,camera(b,s),uS[b].xy,uC3[k],dep);
  gJarShade=1.;q=living(b,k,q,dep);
- return light(b,k,q,orbs(T,k,q,tex(T,q,uS[b].xy,blur),dep,blur)*gJarShade);
+ vec3 colour=light(b,k,q,orbs(T,k,q,tex(T,q,uS[b].xy,blur),dep,blur)*gJarShade);
+ float matte=ss(-.012,.018,q.x)*ss(1.012,.982,q.x)*ss(-.018,.025,q.y)*ss(1.018,.975,q.y);
+ return mix(vec3(.012,.016,.02),colour,matte);
 }
 void main(){
  vec2 s=vUv;float dA,dB;
@@ -338,7 +346,7 @@ void main(){
  }
  col+=mix(uTint[0],uTint[1],uT)/255.*uFlash*.1;
  vec2 v=(s-.5)*vec2(uAspect*.55,1.);col*=1.-dot(v,v)*.55;
- col+=(hash(s*uRes+fract(uTime*7.)*91.)-.5)*.035;
+ // No animated grain: keep the native image clean while the camera moves.
  o=vec4(col,1.);
 }`;
 
@@ -355,45 +363,72 @@ function initGL(){
  const loc=gl.getAttribLocation(pr,'aP');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
  const u={};['uA','uB','uDA','uDB','uM0','uM1','uM2','uM3','uO','uCan','uSpin','uS','uJar','uC3','uFogC','uTint','uT','uTime','uImgA','uAspect','uFlash','uHasB','uCam','uRes','uOpen','uKind','uTone'].forEach(n=>u[n]=gl.getUniformLocation(pr,n));
  gl.uniform1i(u.uA,0);gl.uniform1i(u.uB,1);gl.uniform1i(u.uDA,2);gl.uniform1i(u.uDB,3);gl.uniform1f(u.uImgA,16/9);
- // planet surface maps (Solar System Scope, CC BY 4.0 — credited in the footer): wrap around the globe, mipmapped
- const maps=['p0-moon','p3-mars','p4-earth','earth-clouds'].map((n,i)=>{const t=gl.createTexture();gl.activeTexture(gl.TEXTURE4+i);gl.bindTexture(gl.TEXTURE_2D,t);
+ // Planet maps are requested only when a nearby scene needs them. Until then the photographed
+ // planet remains visible; a placeholder must never replace its surface with a grey sphere.
+ const mapNames=['p0-moon','p3-mars','p4-earth','earth-clouds'];
+ const maps=mapNames.map((n,i)=>{const t=gl.createTexture();gl.activeTexture(gl.TEXTURE4+i);gl.bindTexture(gl.TEXTURE_2D,t);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([90,90,90,255]));
-  const im=new Image();im.decoding='async';im.onload=()=>{gl.activeTexture(gl.TEXTURE4+i);gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im);gl.generateMipmap(gl.TEXTURE_2D);
-   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-   gl.activeTexture(gl.TEXTURE0)}; // units 4–7 keep the maps; every other upload happens on unit 0
-  im.src=`/assets/space/${n}.webp`;gl.uniform1i(u['uM'+i],4+i);return t});
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.uniform1i(u['uM'+i],4+i);return t});
  gl.activeTexture(gl.TEXTURE0);
  const black=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,black);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([3,4,5,255]));
  const flat=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,flat);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,255]));
- // depth maps (tools/depth.py): the pivot depth is read at the focus, so the jar stays put while the world orbits it
- scenes.forEach(s=>{s.dtex=null;s.pivot=.5;const im=new Image();im.decoding='async';
-  im.onload=()=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im);
-   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);s.dtex=t;
-   try{const c=document.createElement('canvas');c.width=64;c.height=36;const x=c.getContext('2d');x.drawImage(im,0,0,64,36);
-    s.pivot=x.getImageData(Math.round(s.f[0]*63),Math.round(s.f[1]*35),1,1).data[0]/255}catch{}};
-  im.src=`/assets/film/depth/${s.id}.webp`});
- // frames come from the scene <img>s; mipmaps keep the 2880px masters crisp when zoomed out
- // uploads are decoded off the main thread first and then go to the GPU one per animation frame: twenty 2880px frames
- // landing at once used to stall the start of the film
- const queue=[];let pumping=0;
- const pump=()=>{pumping=0;queue.shift()?.();if(queue.length)pumping=requestAnimationFrame(pump)};
- const later=job=>{queue.push(job);if(!pumping)pumping=requestAnimationFrame(pump)};
- scenes.forEach((s,i)=>{s.tex=null;const im=s.img;im.loading='eager';
-  const ready=()=>{if(i===0)return up();(im.decode?im.decode():Promise.resolve()).catch(()=>{}).then(()=>later(up))};
-  const up=()=>{gl.activeTexture(gl.TEXTURE0);const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im);gl.generateMipmap(gl.TEXTURE_2D);
-   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);s.tex=t};
-  if(im.complete&&im.naturalWidth)ready();else im.addEventListener('load',ready,{once:true});});
- canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();location.reload()});
+ // At most two loads/decode jobs run together. Each job uploads on a separate animation frame;
+ // scrolling or a rail jump replaces pending work with the current pair and its immediate neighbours.
+ let wanted=[],active=0,stopped=false,lastWindow='',uploadTail=Promise.resolve();
+ const tasks=[];
+ const resource=run=>{const job={state:'idle',run,controller:null};tasks.push(job);return job};
+ const aborted=()=>new DOMException('Cancelled','AbortError');
+ function loadImage(im,url,signal){return new Promise((resolve,reject)=>{
+  let timer;const clear=()=>{clearTimeout(timer);im.removeEventListener('load',loaded);im.removeEventListener('error',failed);signal.removeEventListener('abort',cancel)};
+  const loaded=()=>{clear();resolve(im)},failed=()=>{clear();im.removeAttribute('src');reject(new Error('Image unavailable: '+url))};
+  const cancel=()=>{clear();im.removeAttribute('src');reject(aborted())};
+  if(signal.aborted)return reject(aborted());
+  if(im.getAttribute('src')===url&&im.complete&&im.naturalWidth>1)return resolve(im);
+  im.addEventListener('load',loaded);im.addEventListener('error',failed);signal.addEventListener('abort',cancel,{once:true});
+  timer=setTimeout(failed,20000);im.loading='eager';im.decoding='async';im.src=url;
+ }).then(async image=>{if(image.decode)await image.decode();if(signal.aborted)throw aborted();return image})}
+ function upload(signal,job){const next=uploadTail.then(()=>new Promise((resolve,reject)=>requestAnimationFrame(()=>{
+   if(signal.aborted||stopped)return reject(aborted());try{resolve(job())}catch(error){reject(error)}
+  })));uploadTail=next.catch(()=>{});return next}
+ function texture(image,mipmap=false){gl.activeTexture(gl.TEXTURE0);const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);if(mipmap)gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,mipmap?gl.LINEAR_MIPMAP_LINEAR:gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return t}
+ function pump(){if(stopped)return;while(active<2){const job=wanted.find(j=>j.state==='idle');if(!job)break;
+   const controller=new AbortController();job.state='loading';job.controller=controller;active++;
+   job.run(controller.signal).then(()=>{job.state='ready'},error=>{job.state=controller.signal.aborted||error.name==='AbortError'?'idle':'error'}).finally(()=>{
+    active--;job.controller=null;canvas.dataset.loading=String(active);canvas.dataset.cachedFrames=String(scenes.filter(s=>s.tex).length);pump();kick()});
+  }canvas.dataset.loading=String(active)}
+ const mapJobs=mapNames.map((name,i)=>resource(async signal=>{const im=await loadImage(new Image(),`/assets/space/${name}.webp`,signal);
+  await upload(signal,()=>{gl.activeTexture(gl.TEXTURE4+i);gl.bindTexture(gl.TEXTURE_2D,maps[i]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im);gl.generateMipmap(gl.TEXTURE_2D);
+   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.activeTexture(gl.TEXTURE0)})}));
+ scenes.forEach(s=>{s.tex=null;s.dtex=null;s.pivot=.5;s.frameSrc=s.img.dataset.vgSrc||s.img.getAttribute('src');
+  s.frameJob=resource(async signal=>{const im=await loadImage(s.img,s.frameSrc,signal);await upload(signal,()=>{s.tex=texture(im,true)})});
+  s.depthJob=s.id==='hero'?null:resource(async signal=>{const im=await loadImage(new Image(),`/assets/film/depth/${s.id}.webp`,signal);
+   await upload(signal,()=>{s.dtex=texture(im);try{const c=document.createElement('canvas');c.width=64;c.height=36;const x=c.getContext('2d');x.drawImage(im,0,0,64,36);s.pivot=x.getImageData(Math.round(s.f[0]*63),Math.round(s.f[1]*35),1,1).data[0]/255}catch{}})});
+ });
+ function prepare(p){let a=0;for(let i=1;i<N;i++)if(opened(i,p)>=1)a=i;
+  const indices=[a,a+1,a+2,a-1].filter(i=>i>=0&&i<N),key=indices.join(',');if(key===lastWindow)return;lastWindow=key;
+  const nearby=indices.map(i=>scenes[i]),mapsFor=s=>s.orbs.filter(o=>o.kind===1).flatMap(o=>o.map===2?[2,3]:[o.map]);
+  wanted=[...nearby.slice(0,2).map(s=>s.frameJob),...nearby.slice(0,2).map(s=>s.depthJob),
+   ...nearby.slice(0,2).flatMap(mapsFor).map(i=>mapJobs[i]),...nearby.slice(2).map(s=>s.frameJob),
+   ...nearby.slice(2).map(s=>s.depthJob),...nearby.slice(2).flatMap(mapsFor).map(i=>mapJobs[i])].filter(Boolean);
+  wanted=[...new Set(wanted)];tasks.forEach(job=>{if(job.state==='loading'&&!wanted.includes(job))job.controller.abort()});
+  // Four full-size frames and their depth maps remain on the GPU; revisits use the browser's image cache.
+  scenes.filter(s=>!nearby.includes(s)).forEach(s=>{for(const [field,job]of [['tex',s.frameJob],['dtex',s.depthJob]])if(s[field]){gl.deleteTexture(s[field]);s[field]=null;if(job.state==='ready')job.state='idle'}});
+  pump();
+ }
+ function ready(p){let a=0;for(let i=1;i<N;i++)if(opened(i,p)>=1)a=i;
+  return Boolean(scenes[a].tex&&(a===N-1||opened(a+1,p)===0||scenes[a+1].tex))}
+ canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();stopped=true;wanted=[];tasks.forEach(j=>j.controller?.abort());R=null;vg.classList.remove('is-gl');canvas.remove();stage.querySelector('.vg-stars')?.remove();copyAndRail(cur);kick()});
  stage.prepend(canvas);
  const S=new Float32Array(64),J=new Float32Array(8),C3=new Float32Array(8),fogc=new Float32Array(6),tint=new Float32Array(6);
  const O=new Float32Array(48),CN=new Float32Array(8),SP=new Float32Array(2);
  function pack(slot,s,cam){const L=s.life,o=slot*32,pan=wide()?L.pan:0,c=cam.c||s.f;
   C3.set(s.dtex?[cam.off[0],cam.off[1],cam.dolly,cam.pivot??s.pivot]:[0,0,0,0],slot*4);
   for(let j=0;j<2;j++){const p=s.orbs[j],b=(slot*2+j)*12;
-   if(!p){O.fill(0,b,b+12);continue}
+   if(!p||p.kind===1&&(mapJobs[p.map].state!=='ready'||p.map===2&&mapJobs[3].state!=='ready')){O.fill(0,b,b+12);continue}
    O.set([p.c[0],p.c[1],p.r,p.kind,turn(p),p.tilt||0,p.kind===1?p.map:p.band||0,p.amp||1],b);
    O.set(p.cut?[p.cut[0],p.cut[1],p.cut[2],1]:[0,0,0,0],b+8)}
   CN.set(s.can||[1,0,0,0],slot*4);SP[slot]=s.spin;
@@ -401,7 +436,7 @@ function initGL(){
   S.set(L.water?[L.water[0],L.water[1],0,0]:[2,0,0,0],o+12);S.set(L.fog,o+16);S.set(L.fall||[1,0,0,0],o+20);
   S.set(L.sun?[...L.sun,0]:[0,0,0,0],o+24);S.set([cam.blur,cam.pan?cam.pan[0]:pan,L.path?1:0,cam.pan?cam.pan[1]:0],o+28);
   J.set(L.jar||[1,0,0,0],slot*4);fogc.set(L.fogc,slot*3);tint.set(L.tint,slot*3)}
- return{canvas,
+ return{canvas,prepare,ready,
   // the screen's own pixels (Retina / 2K / 4K, at most a 4K frame), scaled by `quality` when the GPU cannot keep up
   // (see pace()); never below the old fixed budget of ~2.2 MP
   size(){const dpr=Math.min(devicePixelRatio||1,2),full=Math.min(dpr,Math.sqrt(8.3e6/(W*H))),floor=Math.min(full,Math.sqrt(2.2e6/(W*H)));
@@ -426,7 +461,7 @@ function initFx(){
  const c=document.createElement('canvas');c.className='vg-stars';c.setAttribute('aria-hidden','true');
  const ctx=c.getContext('2d');const g=stage.querySelector('.vg-gl');g?g.after(c):stage.prepend(c);
  const rnd=(a,b)=>a+Math.random()*(b-a);
- const stars=Array.from({length:220},()=>({x:rnd(-1,1),y:rnd(-1,1),z:Math.random()}));
+ const stars=Array.from({length:90},()=>({x:rnd(-1,1),y:rnd(-1,1),z:Math.random()}));
  const make={
   hero:()=>Array.from({length:60},()=>({x:Math.random(),y:rnd(.35,.95),s:rnd(.4,1.4),v:rnd(.003,.01),ph:rnd(0,7)})),
   luna:()=>Array.from({length:70},()=>({x:Math.random(),y:rnd(.3,1),s:rnd(.4,1.6),v:rnd(.004,.018),ph:rnd(0,7)})),
@@ -468,7 +503,7 @@ function initFx(){
   ctx.restore();
  }
  let k=1;
- return{size(){k=Math.min(devicePixelRatio||1,2);c.width=Math.round(W*k);c.height=Math.round(H*k);ctx.setTransform(c.width/W,0,0,c.height/H,0,0)}, // sharp particles on Retina
+ return{canvas:c,size(){k=Math.min(devicePixelRatio||1,2);c.width=Math.round(W*k);c.height=Math.round(H*k);ctx.setTransform(c.width/W,0,0,c.height/H,0,0)}, // sharp particles on Retina
   draw(dt,time,speed,fx,fy,rgb,worlds){
    ctx.clearRect(0,0,W,H);
    if(speed>.12){ctx.lineCap='round';const cx=fx*W,cy=fy*H,sc=Math.max(W,H)*.55,tail=Math.min(.5,speed*.22),al=Math.min(1,(speed-.12)*2);
@@ -476,15 +511,14 @@ function initFx(){
      s.z-=speed*dt*.35;if(s.z<=.03){s.z=1;s.x=rnd(-1,1);s.y=rnd(-1,1)}
      const x=cx+s.x/s.z*sc,y=cy+s.y/s.z*sc;if(x<-50||x>W+50||y<-50||y>H+50){s.z=1;continue}
      const z2=Math.min(1,s.z+tail),near=1-s.z;
-     ctx.strokeStyle=`rgba(${rgb},${(near*near*.85*al).toFixed(3)})`;ctx.lineWidth=.4+near*1.8;
+     ctx.strokeStyle=`rgba(${rgb},${(near*near*.28*al).toFixed(3)})`;ctx.lineWidth=.3+near*1.2;
      ctx.beginPath();ctx.moveTo(cx+s.x/z2*sc,cy+s.y/z2*sc);ctx.lineTo(x+.01,y);ctx.stroke()}}
-   worlds.forEach(([id,al])=>world(id,al,dt,time));
+   // Ambient bubbles / pixel confetti are deliberately disabled. Only a real flight draws subtle streaks.
   }};
 }
 
-const R=initGL();
+let R=initGL();
 const fx=R?initFx():null;
-if(R)vg.classList.add('is-gl');
 
 let target=0,cur=0,last=performance.now(),time=0,inView=true,raf=0,mx=0,my=0,tmx=0,tmy=0,vel=0,jumpUntil=0;
 // the film runs over span() px of scroll; after it the final frame ("Шесть миров. Один ты.") rests for REST svh
@@ -495,7 +529,7 @@ let target=0,cur=0,last=performance.now(),time=0,inView=true,raf=0,mx=0,my=0,tmx
 const REST=70;let top0=0,len0=0,span0=1,dpr0=0;
 const span=()=>span0;
 function geometry(){top0=vg.offsetTop;len0=vg.offsetHeight;span0=Math.max(1,len0-H*(1+REST/100))}
-function read(){target=window.vgP??clamp((scrollY-top0)/span0)*(N-1)} // vgP: screenshots
+function read(){target=window.vgP??progress((scrollY-top0)/span0)} // vgP: screenshots
 function measure(){const w=stage.clientWidth||innerWidth,h=stage.clientHeight||innerHeight,same=w===W&&h===H&&dpr0===devicePixelRatio;
  W=w;H=h;dpr0=devicePixelRatio;
  // big screens start at ~4.5 MP and climb to their own pixels while frames stay smooth (stepping down mid-flight shows)
@@ -515,20 +549,25 @@ function pace(ms,now){
 addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;tmx=e.clientX/W-.5;tmy=e.clientY/H-.5},{passive:true});
 
 function copyAndRail(p){
+ const glReady=Boolean(R?.ready(p));vg.classList.toggle('is-gl',glReady);
+ if(R){R.canvas.hidden=!glReady;if(fx)fx.canvas.hidden=!glReady}
  let active=0;
  scenes.forEach((s,i)=>{
   const t=opened(i,p),tn=i<N-1?opened(i+1,p):0,shown=t>0&&tn<1;
-  if(s.el.classList.contains('is-shown')!==shown){s.el.classList.toggle('is-shown',shown);if(!shown&&!R){s.img.style.transform='';s.el.style.webkitMaskImage=s.el.style.maskImage=''}}
+  if(s.el.classList.contains('is-shown')!==shown){s.el.classList.toggle('is-shown',shown);if(!shown){s.img.style.transform='';s.el.style.webkitMaskImage=s.el.style.maskImage=''}}
   if(!shown){if(s.copy.style.visibility!=='hidden'){s.copy.style.visibility='hidden';s.copy.style.opacity='0'}return}
   if(t>=.5)active=i;
-  if(!R){ // CSS fallback camera
+  if(glReady){s.img.style.transform='';s.el.style.webkitMaskImage=s.el.style.maskImage='none'}
+  if(!R&&s.img.dataset.vgSrc&&s.img.getAttribute('src')!==s.img.dataset.vgSrc){s.img.loading='eager';s.img.src=s.img.dataset.vgSrc}
+  if(!glReady){ // CSS camera stays visible while required textures load, or without WebGL.
    if(t<1){const r=(t*s.max).toFixed(1);s.el.style.webkitMaskImage=s.el.style.maskImage=`radial-gradient(circle at var(--fx) var(--fy),#000 ${Math.max(0,r-110)}px,transparent ${r}px)`}
    else s.el.style.webkitMaskImage=s.el.style.maskImage='none';
    const drift=clamp(p-i+1,0,2)/2;
-   s.img.style.transform=`scale(${((1+(1-t)*.22)*(1.03+drift*.07)*(1+tn*tn*.45)).toFixed(4)})`;
+   const restingZoom=s.id==='hero'||s.id==='final'?1:.94;
+   s.img.style.transform=`scale(${((1+(1-t)*.22)*(restingZoom+drift*.02)*(1+tn*tn*.45)).toFixed(4)})`;
   }
-  const o=(i===0?1:sstep(i-.12,i,p))*(i===N-1?1:1-sstep(i+HOLD*.5,i+HOLD*.95,p));
-  s.copy.style.opacity=o.toFixed(3);s.copy.style.transform=o>.999?'':`translate3d(0,${((1-o)*24).toFixed(1)}px,0)`; // at rest the text leaves its GPU layer: crisp glyphs
+  const o=(i===0?1:sstep(i-.12,i,p))*(i===N-1?1:1-sstep(i+hold(i)*.65,i+hold(i)*.98,p));
+  s.copy.style.opacity=o.toFixed(3);s.copy.style.transform=''; // stable text baseline; only the world/camera moves
   s.copy.style.visibility=o>.01?'visible':'hidden';
  });
  const world=worldOf(scenes[active].id);
@@ -542,7 +581,7 @@ function copyAndRail(p){
 // screen uv → frame uv for the scene at rest (the shader's camera() without the depth march): hit tests only
 let view=null; // {s,cam,sway} of the world on screen, null during flights
 function toImage(sx,sy){
- const{s,cam,sway}=view,iA=16/9,asp=W/H,v=[Math.min(1,asp/iA),Math.min(1,iA/asp)],f=cam.c,pan=cam.pan||[wide()?s.life.pan:0,0];
+ const{s,cam,sway}=view,v=frameSpan(W/H,!!s.life.path),f=cam.c,pan=cam.pan||[wide()?s.life.pan:0,0];
  let q=[f[0]*(1-v[0])+(sx-pan[0])*v[0],f[1]*(1-v[1])+(sy-pan[1])*v[1]];
  let dx=(q[0]-f[0])*16/9,dy=q[1]-f[1];const c=Math.cos(cam.roll),n=Math.sin(cam.roll);
  [dx,dy]=[(c*dx-n*dy)/cam.zoom,(n*dx+c*dy)/cam.zoom];
@@ -585,8 +624,8 @@ function film(p,dt){
  // the pair on screen: A is fully open, B is opening (t)
  let a=0;for(let i=1;i<N;i++)if(opened(i,p)>=1)a=i;
  const A=scenes[a],B=a<N-1&&opened(a+1,p)>0?scenes[a+1]:null,t=B?opened(a+1,p):0;
- const rest=clamp(p-a,0,1),breathe=Math.sin(time*.31)*.01;
- const zA=wide()?A.life.z:1.1,zB=B?(wide()?B.life.z:1.1):zA;
+ const rest=clamp(p-a,0,1);
+ const zA=A.life.z,zB=B?B.life.z:zA;
  // A keeps pushing in while it rests, then dives into its jar with a roll; B arrives from a close-up and unrolls
  // camera centre: the world's focus while resting, its planet/star while diving out; the next world arrives
  // centred on its own planet/star and settles on its jar
@@ -596,31 +635,31 @@ function film(p,dt){
  // world is entered already "inside" and the landscape gathers around the camera as the dolly unwinds
  vel+=(Math.min(1,Math.abs(target-cur)*6)-vel)*Math.min(1,dt*3);
  mx+=(tmx-mx)*Math.min(1,dt*2.5);my+=(tmy-my)*Math.min(1,dt*2.5);
- const orbit=k=>[Math.sin(time*.17+k)*.014+Math.sin(time*.061)*.006+mx*.022,Math.cos(time*.13+k)*.006+my*.012];
+ const orbit=k=>[Math.sin(time*.17+k)*.005+Math.sin(time*.061)*.003+mx*.008,Math.cos(time*.13+k)*.003+my*.005];
  const u2=(1-t)*(1-t);
  // flight: the camera heads for the world's star/planet (near things spread a little faster than the sky), its light
  // blooms over the lens and the next world comes out of that light, settling on its jar. Big parallax moves are not
  // possible from single stills (nothing is known behind the jar) — those need plates or video (сайт2/*_PROMPTS.md).
- const oa=orbit(0),ob=orbit(1.7);
+ const oa=orbit(0);
  const pA=A.life.path?1:0;
  // in open space the camera travels its route (life.move) the whole time the frame is on screen — arriving, resting
  // and leaving are one continuous move, so two space frames in a row read as one flight past the planets. Only when a
  // world is next does it finally dive into that world's planet.
- const g=i=>clamp((p-(i-1+HOLD))/(2-HOLD)); // 0 when frame i starts to appear … 1 when it is gone
+ const g=i=>{const h=hold(Math.max(0,i-1));return clamp((p-(i-1+h))/(2-h))}; // 0 when frame i starts to appear … 1 when gone
  // the camera looks at c (it sits in the middle of the screen), so travelling a→b really pans across the plate.
  // match: {c,z} that puts this frame's planet where the previous frame's planet is on screen (used while crossfading)
  const travel=(s,gi,dive,match)=>{const M=s.life.move,k=Math.min(1,gi/.8),e=k*k*(3-2*k)*.6+k*.4;s.g=gi;
   let c=mix2(M.a,M.b,e),zoom=M.z[0]+(M.z[1]-M.z[0])*gi/.8;
   if(match){const m=sstep(.25,.6,gi);c=mix2(match.c,c,m);zoom=match.z+(zoom-match.z)*m}
   zoom*=1+dive*dive*1.3;
-  const asp=W/H,hx=.5*Math.min(1,asp/(16/9))/zoom-.1,hy=.5*Math.min(1,16/9/asp)/zoom-.06; // at most a little of the mirrored sky
+  const asp=W/H,hx=.5*Math.min(1,asp/(16/9))/zoom-.1,hy=.5*Math.min(1,16/9/asp)/zoom-.06; // a small overscan fades out; it never reflects the image
   c=[clamp(c[0],hx,1-hx),clamp(c[1],hy,1-hy)];
   return{c,pan:[.5-c[0],.5-c[1]],zoom,roll:M.roll[0]+(M.roll[1]-M.roll[0])*gi+Math.sin(time*.07)*.008,
    blur:dive*dive*.14,off:[M.side*(1-2*gi)+mx*.02,Math.sin(time*.13)*.004+my*.012],dolly:.05+.1*gi+dive*dive*.3,pivot:.03}}; // a strong depth dolly would swell the planets and smear the edges
  const intoWorld=B&&!B.life.path&&B.id!=='final';
  // leaving a world the camera flies at its planet: stronger dolly, so the jar and near rocks rush out past the edges
- const camA=A.life.move?travel(A,g(a),intoWorld?t:0):{c:mix2(A.f,A.life.dive,sstep(0,.35,t)),zoom:zA*(1+rest*.05+breathe)*(1+t*t*1.7),roll:Math.sin(time*.07)*.012+t*t*.08,blur:t*t*.16,
-  off:oa.map(v=>v*(1-t)),dolly:.1+rest*.18+t*t*1.3};
+ const camA=A.life.move?travel(A,g(a),intoWorld?t:0):{c:mix2(A.f,A.life.dive,sstep(0,.35,t)),zoom:zA*(1+rest*.025)*(1+t*t*1.7),roll:Math.sin(time*.07)*.012+t*t*.08,blur:t*t*.16,
+  off:oa.map(v=>v*(1-t)),dolly:t*t*.35};
  // the next planet seen from the pass frame → where the path frame's planet must be: on screen a point sits at
  // (P − c)·zoom from the centre, so the same place and size means z = zoomA·rP/rQ and c = Q − (P − cA)·rQ/rP
  let match=null;
@@ -628,7 +667,7 @@ function film(p,dt){
   match={c:[Q.c[0]-(P.c[0]-camA.c[0])*k,Q.c[1]-(P.c[1]-camA.c[1])*k],z:camA.zoom/k}}
  // a world settles from a close-up; a space frame is already travelling when it appears
  const camB=B&&(B.life.move?travel(B,g(a+1),0,match):{c:mix2(B.life.dive,B.f,sstep(.3,1,t)),zoom:zB*(1+u2*1.1),roll:-u2*.1+Math.sin(time*.07)*.012,blur:u2*.12,
-  off:ob.map(v=>v*t),dolly:.1+u2*.5});
+  off:oa.map(v=>v*t),dolly:u2*.25});
  const flight=B?Math.sin(t*Math.PI):0;
  const sway=[Math.sin(time*.19)*.005+Math.sin(time*.053)*.003+mx*.01,Math.cos(time*.16)*.0035+my*.007];
  view=!B||t<.04?{s:A,cam:camA,sway}:null;
@@ -638,7 +677,7 @@ function film(p,dt){
  R.draw(A,B,t,camA,camB,time,flight,sway,open,tr);
  const lead=B&&t>.5?B:A,f=B?open:onScreen(A);
  // star streaks belong to flights through space; mist, dust, ring and water carry their own motion
- fx.draw(dt,time,flight*(tr.kind===0||tr.kind===6?1.6:tr.kind===7?.4:.5)+vel*(pA?2.4:.6),f[0],f[1],lead.life.tint.join(','),[[A.id,1-t],...(B?[[B.id,t]]:[])]);
+ fx.draw(dt,time,flight*(tr.kind===0||tr.kind===6?1.1:tr.kind===7?.3:.4),f[0],f[1],lead.life.tint.join(','),[[A.id,1-t],...(B?[[B.id,t]]:[])]);
 }
 
 function frame(now){
@@ -646,19 +685,23 @@ function frame(now){
  const dt=Math.min(.05,(now-last)/1000);pace(now-last,now);last=now;time=window.vgTime??time+dt; // vgTime: screenshots
  cur+=(target-cur)*(1-Math.exp(-dt*(R?3.2:7)));
  if(Math.abs(target-cur)<1e-4||now<jumpUntil||window.vgSnap)cur=target; // jumps cut straight to the shot; vgSnap: screenshots
- copyAndRail(cur);chrome();
- if(R)film(cur,dt);
+ R?.prepare(cur);copyAndRail(cur);chrome();
+ if(R?.ready(cur))film(cur,dt);
  if(inView&&!document.hidden&&(R||cur!==target))raf=requestAnimationFrame(frame);
 }
 function kick(){read();if(!raf){last=performance.now();raf=requestAnimationFrame(frame)}}
 
 function goTo(id){const i=scenes.findIndex(s=>s.id===id);if(i<0)return;
- scrollTo({top:vg.offsetTop+span()*(i+.02)/(N-1),behavior:'smooth'})}
+ cut(vg.offsetTop+span()*position(i+.02));history.replaceState(null,'','#world-'+id)}
 vg.querySelectorAll('[data-vg-go]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();goTo(a.dataset.vgGo)}));
 // "skip the flight" and "back to the start": cut instantly instead of fast-forwarding / rewinding the whole film
 function cut(top){jumpUntil=performance.now()+400;scrollTo({top,behavior:'instant'});kick()}
+function jumpWorld(id){const i=scenes.findIndex(s=>s.id===id);if(i<0)return;cut(vg.offsetTop+span()*position(i+.1));}
+function followWorldHash(){if(location.hash==='#worlds')jumpWorld('luna');else{const match=/^#world-(luna|saturn|venus|mars|earth|neptune)$/.exec(location.hash);if(match)jumpWorld(match[1]);}}
+document.querySelectorAll('a[href$="#worlds"]').forEach(a=>a.addEventListener('click',e=>{const url=new URL(a.href);if(url.origin!==location.origin||url.pathname!==location.pathname)return;e.preventDefault();history.replaceState(null,'','#worlds');jumpWorld('luna');}));
+addEventListener('hashchange',followWorldHash);
 const skip=vg.querySelector('.vg-skip'),toTop=document.querySelector('.vg-top');
-skip?.addEventListener('click',e=>{const h=skip.getAttribute('href'),el=h.startsWith('#')&&document.querySelector(h);if(!el)return;e.preventDefault();cut(el.getBoundingClientRect().top+scrollY)});
+vg.querySelectorAll('[data-vg-exit]').forEach(a=>a.addEventListener('click',e=>{const h=a.getAttribute('href'),el=h.startsWith('#')&&document.querySelector(h);if(!el)return;e.preventDefault();cut(el.getBoundingClientRect().top+scrollY);history.replaceState(null,'',h);el.querySelector('h2')?.setAttribute('tabindex','-1');el.querySelector('h2')?.focus({preventScroll:true})}));
 toTop?.addEventListener('click',e=>{e.preventDefault();cut(0);document.querySelector('.vg-start')?.focus({preventScroll:true})});
 function chrome(){const end=top0+len0-H*.5;
  toTop?.classList.toggle('is-on',scrollY>end);skip?.classList.toggle('is-on',cur>.25&&cur<N-1.15)}
@@ -669,6 +712,8 @@ addEventListener('scroll',()=>{kick();chrome()},{passive:true});
 addEventListener('resize',()=>{measure();kick()},{passive:true});
 addEventListener('load',()=>{geometry();kick()}); // fonts and images can still move the page under the film
 measure();read();cur=target;copyAndRail(cur);kick();
+if(document.readyState==='complete')followWorldHash();
+else addEventListener('DOMContentLoaded',()=>requestAnimationFrame(followWorldHash),{once:true});
 // screenshots: #vg=<scene>[@<0..1 into the flight>][,<time s>[,<jar turn rad>]] opens that world at a fixed moment
 {const m=/^#vg=([\w-]+)(?:@([\d.]+))?(?:,([\d.]+))?(?:,(-?[\d.]+))?/.exec(location.hash);
  if(m){const i=scenes.findIndex(s=>s.id===m[1]);window.vgSnap=1;if(m[3])window.vgTime=+m[3];

@@ -13,6 +13,47 @@ const list=gx.querySelector('.gx-list'),rail=gx.querySelector('.gx-rail'),stage=
 const layer=gx.querySelector('.sys-worlds'),layers=[...layer.querySelectorAll('.sys-world')];
 document.body.append(layer); // above the header when a world is open
 
+// All cinematic gallery images share two request slots. The HTML keeps their URLs inert so
+// browser lazy-loading cannot request six full-size panels before the gallery starts.
+const imageTasks=new Map();let imageRequests=0;
+function pumpImages(){
+ while(imageRequests<2){
+  const task=[...imageTasks.values()].filter(t=>t.state==='queued').sort((a,b)=>a.priority-b.priority)[0];if(!task)return;
+  task.state='loading';imageRequests++;gx.dataset.loadingImages=String(imageRequests);
+  const image=new Image();image.decoding='async';image.fetchPriority=task.priority===0?'high':'low';
+  let settled=false,timer;
+  const finish=ok=>{
+   if(settled)return;settled=true;clearTimeout(timer);image.onload=image.onerror=null;
+   task.state=ok?'ready':'failed';task.image=ok?image:null;imageRequests--;gx.dataset.loadingImages=String(imageRequests);
+   try{
+    for(const [target,ready] of task.targets){
+     if(ok){target.src=task.url;try{ready?.(image)}catch{target.closest('a')?.setAttribute('title','Открыть информацию о комплексе.')}}
+     else target.closest('a')?.setAttribute('title','Изображение недоступно. Открыть информацию о комплексе.');
+    }
+   }finally{task.targets.clear();pumpImages()}
+  };
+  image.onload=()=>finish(true);image.onerror=()=>finish(false);
+  timer=setTimeout(()=>{finish(false);image.src='data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='},15000);
+  image.src=task.url;
+ }
+}
+function requestImage(target,priority=2,ready){
+ const url=target?.dataset.gxSrc;if(!url)return;
+ let task=imageTasks.get(url);
+ if(!task){task={url,priority,state:'queued',targets:new Map()};imageTasks.set(url,task)}
+ task.priority=Math.min(task.priority,priority);
+ if(task.state==='ready'){target.src=url;ready?.(task.image);return}
+ if(task.state==='failed')return;
+ task.targets.set(target,ready);queueMicrotask(pumpImages);
+}
+function hydrateCards(){
+ const images=[...list.querySelectorAll('img[data-gx-src]')];
+ if(!('IntersectionObserver' in window)){images.forEach(image=>requestImage(image));return}
+ const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{
+  if(entry.isIntersecting){requestImage(entry.target,1);observer.unobserve(entry.target)}
+ }),{rootMargin:'600px'});images.forEach(image=>observer.observe(image));
+}
+
 /* ── the time of day picks the greeting and the world the wall starts from ── */
 const h=new Date().getHours();
 const day=h>=22||h<5?['luna','Уже поздно.','Время замедлиться']:h<11?['saturn','Доброе утро.','Пусть энергии хватит на весь день']:h<17?['earth','Хорошего дня.','Найди минуту для себя']:['venus','Добрый вечер.','Время для себя'];
@@ -25,7 +66,7 @@ const btns=[...rail.children];items.forEach(li=>rail.append(btns.find(b=>b.datas
 /* ── WebGL2 ── */
 const cv=document.createElement('canvas');cv.className='gx-gl';cv.setAttribute('aria-hidden','true');
 const gl=cv.getContext('webgl2',{alpha:true,antialias:true,premultipliedAlpha:true});
-if(!gl||still())return; // stacked cards
+if(!gl||still()){hydrateCards();return} // stacked cards
 stage.insertBefore(cv,gx.querySelector('.gx-giant'));
 gx.classList.add('is-live');
 
@@ -55,7 +96,12 @@ void main(){
  o=vec4(c*e,e)*uFade;
 }`;
 const sh=(t,s)=>{const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);if(!gl.getShaderParameter(x,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(x);return x};
-const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(pr);gl.useProgram(pr);
+let pr;
+try{
+ pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(pr);
+ if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(pr));
+ gl.useProgram(pr);
+}catch{gx.classList.remove('is-live');cv.remove();hydrateCards();return}
 const U={};['uAng','uW','uR','uH','uCam','uYaw','uPitch','uTan','uT','uCrop','uVel','uTime','uFocus','uFade','uTint'].forEach(n=>U[n]=gl.getUniformLocation(pr,n));
 const SEG=48,verts=[];for(let i=0;i<=SEG;i++)verts.push(i/SEG,0,i/SEG,1);
 gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(verts),gl.STATIC_DRAW);
@@ -64,21 +110,33 @@ gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
 const aniso=gl.getExtension('EXT_texture_filter_anisotropic');
 const hex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16)/255);
 const worlds=items.map((li,i)=>{
- const img=li.querySelector('.gx-card img'),t=gl.createTexture();
+ const img=li.querySelector('.gx-card img[data-gx-src]'),t=gl.createTexture();
  gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([8,9,12,255]));
- const w={li,id:li.dataset.world,t,tint:hex(li.style.getPropertyValue('--accent').trim()),i};
- const up=()=>{gl.bindTexture(gl.TEXTURE_2D,t);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);gl.generateMipmap(gl.TEXTURE_2D);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+ const w={li,img,id:li.dataset.world,t,tint:hex(li.style.getPropertyValue('--accent').trim()),i,loaded:false};
+ w.upload=image=>{if(w.loaded||gl.isContextLost())return;gl.bindTexture(gl.TEXTURE_2D,t);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);gl.generateMipmap(gl.TEXTURE_2D);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-  if(aniso)gl.texParameterf(gl.TEXTURE_2D,aniso.TEXTURE_MAX_ANISOTROPY_EXT,8)};
- img.loading='eager';if(img.complete&&img.naturalWidth)up();else img.addEventListener('load',up);
+  if(aniso)gl.texParameterf(gl.TEXTURE_2D,aniso.TEXTURE_MAX_ANISOTROPY_EXT,8);w.loaded=true};
  return w;
 });
 const N=worlds.length;
+function loadAround(index){
+ // Direct navigation takes priority over work which has not started yet.
+ const near=[index,index+1,index-1],wanted=new Set(near.map(i=>worlds[i]?.img.dataset.gxSrc).filter(Boolean));
+ for(const [url,task] of imageTasks)if(task.state==='queued'&&!wanted.has(url))imageTasks.delete(url);
+ for(const task of imageTasks.values())if(task.state==='queued')task.priority=5;
+ near.forEach((i,priority)=>{
+  const w=worlds[i];if(!w)return;
+  requestImage(w.img,priority,w.upload);
+ });
+}
+loadAround(0);
 
 /* ── layout: the front world fills ~60% of the screen, its neighbours peek in at the edges ── */
 const HERO=1.1,STEP=.8,TAIL=.35; // in screen heights of scroll
 let W=0,H=0,narrow=false,G={};
 function resize(){
+ if(gl.isContextLost())return;
  W=stage.clientWidth;H=stage.clientHeight;narrow=W/H<.9;
  const dpr=Math.min(devicePixelRatio||1,2),cw=Math.round(W*dpr),ch=Math.round(H*dpr);
  if(cv.width!==cw||cv.height!==ch){cv.width=cw;cv.height=ch;gl.viewport(0,0,cw,ch)} // a phone toolbar sliding does not clear the canvas
@@ -92,13 +150,14 @@ function resize(){
 resize();addEventListener('resize',resize);
 
 /* ── state ── */
-let rot=0,vel=0,mx=0,my=0,tx=0,ty=0,last=performance.now(),t0=last,front=-1,hit=null,open=null,visible=true;
+let rot=0,vel=0,mx=0,my=0,tx=0,ty=0,last=performance.now(),t0=last,front=-1,hit=null,open=null,visible=true,failed=false,loadTarget=0;
 const giant=gx.querySelector('.gx-giant'),hero=gx.querySelector('.gx-hero'),heroImg=gx.querySelector('.gx-hero-img'),flash=gx.querySelector('.gx-flash');
 const screens=()=>-gx.getBoundingClientRect().top/H;
 // style writes only when a value really changes: a custom property set on the wall restyles everything inside it
 const seen=new WeakMap(),put=(el,k,v)=>{let m=seen.get(el);if(!m)seen.set(el,m={});if(m[k]===v)return;m[k]=v;k.startsWith('--')?el.style.setProperty(k,v):el.style[k]=v};
 function project(x,y,z){return[(x/G.tanX/-z*.5+.5)*W,(.5-y/G.tanY/-z*.5)*H]}
 function frame(now){
+ if(failed)return;
  const dt=Math.min(.05,(now-last)/1000);last=now;const t=(now-t0)/1000;
  const s=screens(),sh=s/HERO;
  // hero: dive into the star, flash, the wall appears
@@ -113,6 +172,7 @@ function frame(now){
  put(gx,'--wall',fade.toFixed(3));
  // the wall: scroll position → world index (float), eased
  const target=clamp((s-HERO)/STEP,0,N-1);
+ const wanted=Math.round(target);if(wanted!==loadTarget){loadTarget=wanted;loadAround(wanted)}
  const prev=rot;rot+=(target-rot)*Math.min(1,dt*7);vel+=((rot-prev)/Math.max(dt,.001)-vel)*Math.min(1,dt*10);
  tx+=(mx-tx)*Math.min(1,dt*3);ty+=(my-ty)*Math.min(1,dt*3);
  gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
@@ -140,6 +200,10 @@ function frame(now){
 new IntersectionObserver(([e])=>{const was=visible;visible=e.isIntersecting;if(visible&&!was){last=performance.now();requestAnimationFrame(frame)}}).observe(gx);
 requestAnimationFrame(frame);
 gx.drawFrame=frame; // lets a test harness step the scene when the tab is not being painted
+cv.addEventListener('webglcontextlost',event=>{
+ event.preventDefault();failed=true;gx.classList.remove('is-live');gx.style.height='';cv.remove();
+ hero.style.cssText='';heroImg.style.transform='';gx.style.removeProperty('--wall');hydrateCards();
+});
 
 /* ── settle on the nearest world when the scroll stops ── */
 const topOf=()=>gx.getBoundingClientRect().top+scrollY;
@@ -148,13 +212,13 @@ let idle;
 addEventListener('scroll',()=>{
  clearTimeout(idle);
  idle=setTimeout(()=>{
-  if(open)return;const s=screens(),x=(s-HERO)/STEP;
+  if(failed||open)return;const s=screens(),x=(s-HERO)/STEP;
   if(x<-.3||x>N-1+.2)return; // still in the dive, or already below the wall
   const i=clamp(Math.round(x),0,N-1),y=posOf(i);
   if(Math.abs(scrollY-y)>2)scrollTo({top:y,behavior:'smooth'});
  },170);
 },{passive:true});
-btns.forEach(b=>b.addEventListener('click',()=>{const i=worlds.findIndex(w=>w.id===b.dataset.gxGo);scrollTo({top:posOf(i),behavior:'smooth'})}));
+btns.forEach(b=>b.addEventListener('click',()=>{const i=worlds.findIndex(w=>w.id===b.dataset.gxGo);loadAround(i);scrollTo({top:posOf(i),behavior:'smooth'})}));
 
 /* ── mouse: the camera leans a little; the world in front is a button ── */
 const inHit=(x,y)=>hit&&x>=hit.x0&&x<=hit.x1&&y>=hit.y0&&y<=hit.y1;
@@ -164,11 +228,12 @@ stage.addEventListener('pointermove',e=>{
 });
 stage.addEventListener('pointerleave',()=>{mx=my=0;stage.classList.remove('is-pointing')});
 stage.addEventListener('click',e=>{
+ if(failed)return;
  if(e.target.closest('a,button'))return;
  const r=stage.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
  if(inHit(x,y))fly(hit.id);
 });
-list.addEventListener('click',e=>{const a=e.target.closest('[data-world]');if(!a||!a.matches('a'))return;e.preventDefault();fly(a.dataset.world)});
+list.addEventListener('click',e=>{if(failed)return;const a=e.target.closest('[data-world]');if(!a||!a.matches('a'))return;e.preventDefault();fly(a.dataset.world)});
 
 /* ── a world full screen: it grows out of its panel and folds back into it ── */
 const rectOf=id=>{
@@ -179,6 +244,8 @@ const rectOf=id=>{
 const inset=c=>`inset(${c.t}px ${c.r}px ${c.b}px ${c.l}px round 2px)`;
 function show(id,{from,instant}={}){
  const w=layers.find(x=>x.dataset.world===id);if(!w)return;
+ loadAround(worlds.findIndex(world=>world.id===id));
+ requestImage(w.querySelector('img[data-gx-src]'),0);
  const prev=open&&layers.find(x=>x.dataset.world===open);
  layer.hidden=false;root.classList.add('sys-locked');
  w.hidden=false;w.classList.remove('is-open');w.style.zIndex='2';

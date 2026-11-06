@@ -6,9 +6,11 @@ const nm=p=>p.name.charAt(0)+p.name.slice(1).toLowerCase(); // LUNA → Luna
 export const phrases={luna:'Хочу спокойно уснуть',saturn:'Не хватает энергии',venus:'Хочу гармонии с собой',mars:'Нужно больше сил',earth:'Хочу, чтобы кожа сияла',neptune:'Хочу сохранить молодость'};
 
 export function buildGallery({products}){
+  const empty='data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
   const worlds=products.map((p,i)=>`<li class="gx-item" data-world="${p.id}" style="--accent:${p.color}">
       <a class="gx-card" href="/worlds/${p.id}/" data-world="${p.id}">
-        <img src="/assets/film/${p.id}.webp" width="2880" height="1620" alt="Банка Moonvit ${p.name} в мире ${nm(p)}" loading="${i<2?'eager':'lazy'}" decoding="async">
+        <img src="${empty}" data-gx-src="/assets/film/${p.id}.webp" width="2880" height="1620" alt="Банка Moonvit ${p.name} в мире ${nm(p)}" decoding="async">
+        <noscript><img src="/assets/film/${p.id}.webp" width="2880" height="1620" alt="Банка Moonvit ${p.name} в мире ${nm(p)}" loading="lazy" decoding="async"></noscript>
       </a>
       <div class="gx-copy">
         <p class="gx-phrase">«${phrases[p.id]}»</p>
@@ -21,7 +23,7 @@ export function buildGallery({products}){
   const layers=products.map((p,i)=>{
     const prev=products[(i+5)%6],next=products[(i+1)%6];
     return `<article class="sys-world" data-world="${p.id}" style="--accent:${p.color}" aria-labelledby="sw-${p.id}" hidden>
-      <img class="sw-img" src="/assets/film/${p.id}.webp" alt="" loading="lazy" decoding="async">
+      <img class="sw-img" src="${empty}" data-gx-src="/assets/film/${p.id}.webp" alt="" decoding="async">
       <div class="sw-copy">
         <p class="sw-count">${i+1} из 6 <span>${p.category}</span></p>
         <h2 class="sw-name" id="sw-${p.id}">${nm(p)}</h2>
@@ -39,7 +41,7 @@ export function buildGallery({products}){
         <span class="sw-step"><button type="button" data-sys-go="${prev.id}" aria-label="Предыдущий мир: ${nm(prev)}">←</button><button type="button" data-sys-go="${next.id}" aria-label="Следующий мир: ${nm(next)}">${nm(next)} →</button></span>
       </nav>
     </article>`;}).join('');
-  return `<section class="gx" id="worlds" aria-labelledby="gx-title">
+  return `<noscript><style>.gx-card>img[data-gx-src]{display:none}</style></noscript><section class="gx" id="worlds" aria-labelledby="gx-title">
     <div class="gx-stage">
       <img class="gx-sky" src="/assets/system/sky.webp" width="2560" height="1440" alt="">
       <div class="gx-hero">
@@ -58,5 +60,5 @@ export function buildGallery({products}){
       <div class="gx-film" aria-hidden="true"></div>
     </div>
     <div class="sys-worlds" role="dialog" aria-modal="true" aria-label="Мир Moonvit" hidden>${layers}</div>
-  </section>`;
+  </section><a class="vg-catalog" href="/catalog/">К комплексам <span aria-hidden="true">↗</span></a>`;
 }

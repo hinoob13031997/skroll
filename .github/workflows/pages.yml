@@ -26,10 +26,8 @@ jobs:
           node-version: 20
       - id: pages
         uses: actions/configure-pages@v5
-      - name: Сборка и проверка
-        run: node build.mjs && node check.mjs
-      - name: Сборка под адрес GitHub Pages
-        run: node build.mjs
+      - name: Сборка и проверка готового сайта GitHub Pages
+        run: node build.mjs && node check.mjs && node tools/check-gummies.mjs && node tools/check-gummy-interaction.mjs
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}
           SITE_URL: ${{ steps.pages.outputs.base_url }}
