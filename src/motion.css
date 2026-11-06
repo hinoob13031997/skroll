@@ -1,0 +1,45 @@
+/* Orbital light, floating packs and tactile UI. All effects honor the site's motion setting. */
+.page-head,.product-hero,.hr-ritual{position:relative;isolation:isolate}
+.page-head{overflow:clip}
+.hr-ritual{overflow:clip}
+.motion-orbit{position:absolute;z-index:-1;pointer-events:none;width:clamp(260px,38vw,560px);aspect-ratio:1;right:clamp(-140px,-5vw,-20px);top:50%;translate:0 -50%;opacity:0;transition:opacity 1s}
+.motion-ready .motion-orbit{opacity:.65}
+.motion-orbit i{position:absolute;inset:12%;border:1px solid #b6ccea38;border-radius:50%;transform:rotate(-28deg) scaleY(.48)}
+.motion-orbit i:nth-child(2){inset:2%;border-color:#dfd4b325;transform:rotate(38deg) scaleY(.58)}
+.motion-orbit i:nth-child(3){inset:27%;border:0;background:radial-gradient(circle,#acc8f215,transparent 70%)}
+.motion-orbit i:not(:last-child)::after{content:'';position:absolute;top:50%;left:-4px;width:7px;height:7px;border-radius:50%;background:#d3e3fc;box-shadow:0 0 14px #b5d1ff90}
+.motion-ready .motion-orbit i:first-child{animation:motion-orbit-a 24s linear infinite paused}
+.motion-ready .motion-orbit i:nth-child(2){animation:motion-orbit-b 32s linear infinite reverse paused}
+.motion-ready .motion-in-view .motion-orbit i{animation-play-state:running}
+@keyframes motion-orbit-a{to{transform:rotate(332deg) scaleY(.48)}}
+@keyframes motion-orbit-b{to{transform:rotate(398deg) scaleY(.58)}}
+.product-hero .motion-orbit{z-index:0;right:2%;width:50%;opacity:.32}
+.hr-ritual .motion-orbit{right:0;width:46%;opacity:.32;top:42%}
+.motion-ready .product-hero>.pack{animation:motion-pack 7s ease-in-out infinite paused;transform-origin:50% 65%}
+@keyframes motion-pack{0%,100%{translate:0 0;rotate:-1deg}50%{translate:0 -16px;rotate:1deg}}
+.motion-ready .jar-lineup a:nth-child(2n) img{animation:motion-lineup 6.5s ease-in-out infinite paused}
+.motion-ready .jar-lineup a:nth-child(2n+1) img{animation:motion-lineup 7.5s ease-in-out -3s infinite paused}
+.motion-ready .product-hero.motion-in-view>.pack,.motion-ready .jar-lineup.motion-in-view img{animation-play-state:running}
+@keyframes motion-lineup{0%,100%{translate:0 0}50%{translate:0 -10px}}
+.motion-ready .motion-depth{transform:perspective(1000px) rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg));transition:transform .55s cubic-bezier(.2,.8,.2,1);transform-origin:center}
+.motion-ready .motion-depth:hover{transition-duration:.16s}
+.motion-ready :is(.button,.vg-start,.vg-catalog,.chip,.hr-button,.hr-save,.hr-filters button,.state-options button){position:relative;isolation:isolate;overflow:clip;transition:background .25s,color .25s,border-color .25s,translate .2s,box-shadow .35s}
+/* Keep the persistent shortcut fixed; the generic interaction treatment must not change its position. */
+.motion-ready .vg-catalog{position:fixed}
+.motion-ready :is(.button,.vg-start,.chip,.hr-button,.hr-save):hover{translate:0 -3px;box-shadow:0 8px 26px #0003}
+.motion-ready :is(.button,.vg-start,.chip,.hr-button,.hr-save):active{translate:0 1px}
+.motion-ripple{position:absolute;z-index:-1;border-radius:50%;background:currentColor;pointer-events:none}
+.desktop-nav a,.footer-links a{position:relative}
+.desktop-nav a::after,.footer-links a::after{content:'';position:absolute;left:0;right:0;bottom:-4px;height:1px;background:currentColor;transform:scaleX(0);transform-origin:left;transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+.desktop-nav a:hover::after,.desktop-nav a:focus-visible::after,.footer-links a:hover::after{transform:scaleX(1)}
+.motion-ready .component-grid svg{transition:rotate .7s,scale .7s}
+.motion-ready .component-grid li:hover svg{rotate:12deg;scale:1.1}
+.motion-paused *{animation-play-state:paused!important}
+.motion-off .motion-orbit{display:none}
+@media(max-width:700px){
+ .page-head .motion-orbit{right:-160px;opacity:.32}
+ .product-hero .motion-orbit{width:100%;right:-25%;top:70%}
+ .hr-ritual .motion-orbit{width:90%;right:-10%;top:38%}
+ .motion-ready .product-hero>.pack{animation-duration:9s}
+}
+@media(prefers-reduced-motion:reduce){.motion-orbit{display:none}.motion-depth{transform:none!important}.motion-ripple{display:none}}

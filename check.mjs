@@ -2,6 +2,7 @@ import {readFile,readdir,stat} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import assert from 'node:assert/strict';
 import {recommend} from './src/home.js';
+import {runInNewContext} from 'node:vm';
 
 async function walk(p){let files=[];for(const e of await readdir(p,{withFileTypes:true}))files.push(...(e.isDirectory()?await walk(p+'/'+e.name):[p+'/'+e.name]));return files;}
 let build;
@@ -11,13 +12,14 @@ const {basePath='',siteUrl,routes}=build;
 assert.ok(Array.isArray(routes)&&siteUrl,'Invalid build manifest');
 const files=await walk('dist');let checked=0;const errors=[];
 const worldIds=['luna','saturn','venus','mars','earth','neptune'];
-const required=['/','/gallery/','/catalog/','/about/','/contacts/','/partners/','/journal/',...worldIds.map(id=>`/worlds/${id}/`)];
+const required=['/','/catalog/','/about/','/contacts/','/partners/','/journal/',...worldIds.map(id=>`/worlds/${id}/`)];
 for(const route of required)if(!routes.includes(route))errors.push(`Missing route in build: ${route}`);
 for(const route of routes){
  const file='dist'+(route==='/'?'/index.html':route+'index.html');
  try{
   const html=await readFile(file,'utf8');
   if(!html.includes(`rel="canonical" href="${siteUrl+route}"`))errors.push(`${file}: incorrect canonical URL`);
+  if(!html.includes(`src="${basePath}/motion.js?`)||!html.includes(`href="${basePath}/motion.css?`))errors.push(`${file}: missing site-wide motion`);
  }catch{errors.push(`Missing generated page: ${route}`);}
 }
 
@@ -56,12 +58,15 @@ for(const file of files.filter(f=>f.endsWith('.css'))){
 }
 
 const gallery=await readFile('dist/gallery/index.html','utf8');
-assert.match(gallery,/<section class="gx"/,'/gallery/ must contain the gallery, not a redirect or home page');
-assert.ok(gallery.includes(`src="${basePath}/gallery.js?`),'Gallery script must use the deployment path');
-assert.ok(!gallery.includes('http-equiv="refresh"'),'Gallery must not redirect to the flight');
-for(const id of worldIds)assert.ok(gallery.includes(`class="gx-item" data-world="${id}"`),`Missing gallery world: ${id}`);
+assert.ok(!gallery.includes('class="gx"'),'The alternate gallery must not create a second experience');
+const legacyScript=gallery.match(/<script>([\s\S]*?)<\/script>/)[1];
+for(const id of worldIds)for(const hash of ['#'+id,'#world-'+id]){
+ let destination;runInNewContext(legacyScript,{location:{hash,replace:value=>{destination=value}}});
+ assert.equal(destination,basePath+'/#world-'+id,'Legacy world URLs must preserve their destination');
+}
+for(const hash of ['','#worlds','#unknown']){let destination;runInNewContext(legacyScript,{location:{hash,replace:value=>{destination=value}}});assert.equal(destination,basePath+'/#worlds');}
 const sitemap=await readFile('dist/sitemap.xml','utf8');
-assert.ok(sitemap.includes(`<loc>${siteUrl}/gallery/</loc>`),'Gallery must be discoverable in sitemap');
+assert.ok(!sitemap.includes('/gallery/'),'The retired gallery must not be listed as a separate page');
 
 const read=id=>readFile(`dist/worlds/${id}/index.html`,'utf8');
 assert.match(await read('saturn'),/Кофеин<\/td><td>15 мг/);
@@ -86,8 +91,9 @@ assert.match(home,/assets\/fonts\/onest-variable\.ttf/);assert.ok(!home.includes
 assert.match(home,/hero-clean-v2\.webp/);
 assert.match(home,/id="worlds"/);
 assert.ok(home.includes(`class="vg-catalog" href="${basePath}/catalog/"`),'A permanent catalog link must work under the deployment path');
-assert.equal((home.match(/data-vg-src=/g)||[]).length,20,'Hidden film frames must remain deferred in HTML');
-assert.equal((gallery.match(/data-gx-src=/g)||[]).length,12,'Gallery panels and detail backgrounds must remain deferred');
+const shots=[...home.matchAll(/data-scene="([^"]+)"/g)].map(m=>m[1]);
+assert.deepEqual(shots,['hero',...worldIds.flatMap(id=>['path-'+id,id]),'final'],'One approach and one product shot per world; no repeated pass/cruise angles');
+assert.equal((home.match(/data-vg-src=/g)||[]).length,13,'Hidden film frames must remain deferred in HTML');
 assert.match(home,/<span class="vg-component">витамин C<\/span>/,'Vitamin name and letter wrap together');
 for(const goal of worldIds)for(const time of ['morning','day','evening','flex'])for(const caffeine of ['yes','no']){
  const result=recommend({goal,time,caffeine});assert.equal(result.id,goal);assert.equal(result.conflict,goal==='saturn'&&(time==='evening'||caffeine==='no'));
@@ -95,4 +101,4 @@ for(const goal of worldIds)for(const time of ['morning','day','evening','flex'])
 assert.equal(recommend({goal:'unknown',time:'morning',caffeine:'yes'}),null);
 if(errors.length){console.error(errors.join('\n'));process.exit(1);}
 const bytes=(await Promise.all(files.map(async f=>(await stat(f)).size))).reduce((a,b)=>a+b,0);
-console.log(`PASS: ${routes.length} routes, ${files.filter(f=>f.endsWith('.html')).length} HTML documents, ${checked} local references, gallery, SEO, content and 48 quiz combinations${basePath?` under ${basePath}/`:''}. Total dist: ${(bytes/1024/1024).toFixed(2)} MB.`);
+console.log(`PASS: ${routes.length} routes, ${files.filter(f=>f.endsWith('.html')).length} HTML documents, ${checked} local references, 14-shot journey, legacy redirects, site-wide motion, SEO, content and 48 quiz combinations${basePath?` under ${basePath}/`:''}. Total dist: ${(bytes/1024/1024).toFixed(2)} MB.`);

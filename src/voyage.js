@@ -1,6 +1,6 @@
 // Moonvit home — scroll film (markup: content/cinema-home.mjs, styles: "Voyage" block in styles.css).
 // Frames: dist/assets/film/*.webp, from the 3840×2160 masters in the project root (01_hero … 08_final_reveal).
-// The stage is sticky; scroll position p runs 0..N-1 over the scenes. Each scene rests for HOLD of its segment,
+// The stage is sticky; scroll position p runs 0..N-1 over the scenes. Each scene rests for part of its segment,
 // then the camera flies into the world's planet/star and the next world opens from that point.
 // WebGL2 makes every frame living footage: camera drift/roll/parallax, water, rings, planets, fog, haze, waterfall,
 // light sweeping over the jar; a restrained 2D layer adds speed streaks only during flights.
@@ -16,10 +16,10 @@ if(off){document.querySelectorAll('[data-vg-src]').forEach(im=>{im.loading='lazy
 const stage=vg.querySelector('.vg-stage');
 const scenes=[...vg.querySelectorAll('.vg-scene')].map(el=>({el,id:el.dataset.scene,img:el.querySelector('.vg-img'),copy:el.querySelector('.vg-copy')}));
 const N=scenes.length;
-// Product worlds receive time to read; the space shots are brief connective cuts. The whole journey
-// takes about 9.7 screens instead of 24.7 while retaining every scene and its existing bookmark.
-const hold=i=>scenes[i].el.classList.contains('vg-path')?.08:.6;
-const stops=[0];scenes.slice(0,-1).forEach((s,i)=>stops.push(stops[i]+(i===0?80:s.el.classList.contains('vg-path')?14:90)));
+// Fewer shots, more time inside each: one approach per world, with no repeated pass/cruise angles.
+// 14 scenes over 12.8 screens. Product shots have 33% more scroll time; approaches no longer flash past.
+const hold=i=>scenes[i].el.classList.contains('vg-path')?.18:.68;
+const stops=[0];scenes.slice(0,-1).forEach((s,i)=>stops.push(stops[i]+(i===0?90:s.el.classList.contains('vg-path')?50:120)));
 const travelLength=stops[N-1];
 const position=p=>{const i=Math.min(N-2,Math.max(0,Math.floor(p)));return (stops[i]+(stops[i+1]-stops[i])*(p-i))/travelLength};
 const progress=k=>{const x=clamp(k)*travelLength;let i=0;while(i<N-2&&x>=stops[i+1])i++;return i+(x-stops[i])/(stops[i+1]-stops[i])};
@@ -129,11 +129,11 @@ const wide=()=>W/H>1.15;
 function frameSpan(aspect,space=false){const a=16/9,k=space ? .72+.28*sstep(.65,1.15,aspect) : 1;return[Math.max(1,aspect/a)*k,Math.max(1,a/aspect)*k];}
 const focusOf=s=>{const cs=getComputedStyle(s.el);return[parseFloat(cs.getPropertyValue('--fx'))/100,parseFloat(cs.getPropertyValue('--fy'))/100]};
 scenes.forEach(s=>{s.f=focusOf(s);s.life=LIFE[s.id]||LIFE.hero;s.g=0;
- s.orbs=(ORBS[s.id]||[]).map(o=>({...o,ang:o.ang0||0,vel:0,s}));s.can=CAN[s.id]||null;s.spin=0;s.spinV=0});
+ s.orbs=(ORBS[s.id]||[]).map(o=>({...o,rate:o.rate*1.35,ang:o.ang0||0,vel:0,s}));s.can=CAN[s.id]||null;s.spin=0;s.spinV=0});
 scenes.forEach(s=>{const from=scenes.find(x=>x.id===LINK[s.id]);if(from&&s.orbs[0])s.orbs[0].link=from.orbs[0]});
 // how far a globe has turned: its own spin + the part of the fly-by already flown (+ the globe it continues)
 const turn=o=>o.link?turn(o.link):o.ang+(o.orbit||0)*o.s.g;
-const BAR=[scenes.findIndex(s=>s.id==='cruise-a'),scenes.findIndex(s=>s.id==='neptune')];
+const BAR=[scenes.findIndex(s=>s.id==='path-luna'),scenes.findIndex(s=>s.id==='neptune')];
 // where the jar/focus lands on screen (the next world opens from there)
 const onScreen=(s,pt=s.f)=>wide()?[pt[0]+s.life.pan,pt[1]]:pt;
 function reach(s){const[fx,fy]=onScreen(s);s.max=Math.hypot(Math.max(fx,1-fx)*W,Math.max(fy,1-fy)*H)+120}
@@ -616,7 +616,7 @@ stage.addEventListener('pointerup',release);stage.addEventListener('pointercance
 function alive(s,dt,idle){
  for(const q of s.orbs){const o=q.link||q; // a continued globe keeps turning on the frame where it is now
   if(window.vgTime!=null)o.ang=(o.ang0||0)+o.rate*time;else if(grab?.orb!==o){o.ang+=(o.rate+o.vel)*dt;o.vel*=Math.exp(-dt*.9)}}
- if(s.can&&grab?.s!==s&&!s.hold){const rest=idle?Math.sin(time*.45+1)*.06+mx*.3:0;
+ if(s.can&&grab?.s!==s&&!s.hold){const rest=idle?Math.sin(time*.45+1)*.085+mx*.3:0;
   s.spinV+=(-(s.spin-rest)*26-s.spinV*4.2)*dt;s.spin+=s.spinV*dt}
 }
 
@@ -635,7 +635,7 @@ function film(p,dt){
  // world is entered already "inside" and the landscape gathers around the camera as the dolly unwinds
  vel+=(Math.min(1,Math.abs(target-cur)*6)-vel)*Math.min(1,dt*3);
  mx+=(tmx-mx)*Math.min(1,dt*2.5);my+=(tmy-my)*Math.min(1,dt*2.5);
- const orbit=k=>[Math.sin(time*.17+k)*.005+Math.sin(time*.061)*.003+mx*.008,Math.cos(time*.13+k)*.003+my*.005];
+ const orbit=k=>[Math.sin(time*.17+k)*.008+Math.sin(time*.061)*.004+mx*.012,Math.cos(time*.13+k)*.004+my*.008];
  const u2=(1-t)*(1-t);
  // flight: the camera heads for the world's star/planet (near things spread a little faster than the sky), its light
  // blooms over the lens and the next world comes out of that light, settling on its jar. Big parallax moves are not
