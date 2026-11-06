@@ -85,6 +85,9 @@ assert.match(home,/data-gummies-viewer/);assert.ok(!home.includes('data-gummy-ac
 assert.match(home,/assets\/fonts\/onest-variable\.ttf/);assert.ok(!home.includes('fonts.googleapis.com'),'Fonts are self-hosted');
 assert.match(home,/hero-clean-v2\.webp/);
 assert.match(home,/id="worlds"/);
+assert.ok(home.includes(`class="vg-catalog" href="${basePath}/catalog/"`),'A permanent catalog link must work under the deployment path');
+assert.equal((home.match(/data-vg-src=/g)||[]).length,20,'Hidden film frames must remain deferred in HTML');
+assert.equal((gallery.match(/data-gx-src=/g)||[]).length,12,'Gallery panels and detail backgrounds must remain deferred');
 assert.match(home,/<span class="vg-component">витамин C<\/span>/,'Vitamin name and letter wrap together');
 for(const goal of worldIds)for(const time of ['morning','day','evening','flex'])for(const caffeine of ['yes','no']){
  const result=recommend({goal,time,caffeine});assert.equal(result.id,goal);assert.equal(result.conflict,goal==='saturn'&&(time==='evening'||caffeine==='no'));

@@ -6,7 +6,9 @@
 (()=>{
 const gx=document.querySelector('.gx');if(!gx)return;
 const root=document.documentElement;
-const still=()=>root.classList.contains('motion-off')||matchMedia('(prefers-reduced-motion: reduce)').matches;
+document.querySelector('#motion-toggle')?.addEventListener('click',()=>setTimeout(()=>location.reload(),50));
+let savedMotionOff=false;try{savedMotionOff=localStorage.getItem('moonvit-motion')==='off'}catch{}
+const still=()=>savedMotionOff||root.classList.contains('motion-off')||matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
 const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a));return t*t*(3-2*t)};
 const list=gx.querySelector('.gx-list'),rail=gx.querySelector('.gx-rail'),stage=gx.querySelector('.gx-stage');
@@ -189,7 +191,7 @@ function frame(now){
  }
  // the world in front: its words, the giant name, the rail, the clickable area
  const f=Math.round(rot);
- if(f!==front){front=f;items.forEach((li,i)=>li.classList.toggle('is-front',i===f));btns.forEach(b=>b.classList.toggle('is-on',b.dataset.gxGo===worlds[f].id));
+ if(f!==front){front=f;items.forEach((li,i)=>li.classList.toggle('is-front',i===f));btns.forEach(b=>{const on=b.dataset.gxGo===worlds[f].id;b.classList.toggle('is-on',on);b.setAttribute('aria-pressed',String(on))});
   giant.textContent=worlds[f].li.querySelector('.gx-name').textContent;gx.style.setProperty('--on',worlds[f].li.style.getPropertyValue('--accent'));}
  put(gx,'--turn',clamp(1-Math.abs(rot-f)*3).toFixed(3)); // words fade while the wall is between worlds
  const a0=(f-rot)*G.step-G.w/2+tx*.035,a1=a0+G.w,z0=-G.R*Math.cos(a0)-G.cam,z1=-G.R*Math.cos(a1)-G.cam;
